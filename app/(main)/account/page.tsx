@@ -37,7 +37,16 @@ export default function Account() {
     setOpenSignOutConfirm(false)
   }
 
-  const handleAddressSave = (addressData: any) => {
+  const handleAddressSave = (addressData: {
+    country: string
+    firstName: string
+    lastName: string
+    address: string
+    apartment: string
+    city: string
+    state: string
+    pincode: string
+  }) => {
     // Convert form data to Address format
     const newAddress = {
       name: `${addressData.firstName} ${addressData.lastName}`.trim(),
@@ -233,7 +242,7 @@ export default function Account() {
                           <div>
                             <p className="font-medium text-2xl font-times mb-1">Sign out everywhere</p>
                             <p className="text-sm text-foreground/70 leading-relaxed">
-                              If you've lost a device or have security concerns, signing out everywhere will log you out
+                              If you&apos;ve lost a device or have security concerns, signing out everywhere will log you out
                               from all devices to keep your account secure.
                             </p>
                           </div>
@@ -249,14 +258,14 @@ export default function Account() {
                           </CommonButton>
 
                           <p className="text-xs text-foreground/60 hidden md:block">
-                            You'll also be signed out on this device.
+                            You&apos;ll also be signed out on this device.
                           </p>
                         </div>
                       </div>
 
                       {/* MOBILE HELPER TEXT */}
                       <p className="text-xs text-foreground/60 mt-3 md:hidden">
-                        You'll also be signed out on this device.
+                        You&apos;ll also be signed out on this device.
                       </p>
                     </div>
                   </TabPanel>

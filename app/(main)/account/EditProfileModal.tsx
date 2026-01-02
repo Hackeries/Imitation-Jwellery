@@ -18,18 +18,24 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
   const { data: userProfile } = useUserProfile()
   const updateProfile = useUpdateProfile()
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
+    firstName: userProfile?.name?.split(" ")[0] || "",
+    lastName: userProfile?.name?.split(" ")[1] || "",
+    email: userProfile?.email || "",
   })
 
   // Update form data when userProfile changes
   useEffect(() => {
     if (userProfile) {
-      setFormData({
-        firstName: userProfile.name?.split(" ")[0] || "",
-        lastName: userProfile.name?.split(" ")[1] || "",
-        email: userProfile.email || "",
+      const firstName = userProfile.name?.split(" ")[0] || ""
+      const lastName = userProfile.name?.split(" ")[1] || ""
+      const email = userProfile.email || ""
+      
+      // Only update if values have changed to avoid infinite loops
+      setFormData((prev) => {
+        if (prev.firstName !== firstName || prev.lastName !== lastName || prev.email !== email) {
+          return { firstName, lastName, email }
+        }
+        return prev
       })
     }
   }, [userProfile])

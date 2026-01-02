@@ -12,7 +12,16 @@ type AddAddressModalProps = {
   open: boolean
   onClose: () => void
   isEdit?: boolean
-  onSave?: (address: any) => void
+  onSave?: (address: {
+    country: string
+    firstName: string
+    lastName: string
+    address: string
+    apartment: string
+    city: string
+    state: string
+    pincode: string
+  }) => void
 }
 
 export default function AddAddressModal({ open, onClose, isEdit = false, onSave }: AddAddressModalProps) {
