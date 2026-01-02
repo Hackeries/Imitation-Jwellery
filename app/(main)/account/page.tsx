@@ -11,16 +11,21 @@ import SignOutConfirmModal from "@/app/components/SignoutConfirm"
 import DeleteAddressConfirmModal from "@/app/components/DeleteAddressConfirm"
 import { useUserProfile, useLogout } from "@/hooks/use-auth"
 import { useOrders } from "@/hooks/use-orders"
+import { useAddAddress, useDeleteAddress, useSetDefaultAddress } from "@/hooks/use-address"
 
 export default function Account() {
   const [openAddAddress, setOpenAddAddress] = useState(false)
   const [openEditProfile, setOpenEditProfile] = useState(false)
   const [openSignOutConfirm, setOpenSignOutConfirm] = useState(false)
   const [openDeleteAddress, setOpenDeleteAddress] = useState(false)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
 
   const { data: userProfile } = useUserProfile()
   const { data: orders = [] } = useOrders()
   const logout = useLogout()
+  const addAddress = useAddAddress()
+  const deleteAddress = useDeleteAddress()
+  const setDefaultAddress = useSetDefaultAddress()
 
   const userName = userProfile?.name || "User"
   const userPhone = userProfile?.phone || "+91 0000000000"
@@ -33,8 +38,26 @@ export default function Account() {
   }
 
   const handleAddressSave = (addressData: any) => {
-    console.log("Address saved:", addressData)
-    // TODO: Call API mutation to save address
+    // Convert form data to Address format
+    const newAddress = {
+      name: `${addressData.firstName} ${addressData.lastName}`.trim(),
+      address: addressData.address + (addressData.apartment ? `, ${addressData.apartment}` : ""),
+      cityZip: `${addressData.city}, ${addressData.state} ${addressData.pincode}`,
+      isDefault: addresses.length === 0, // First address is default
+    }
+    addAddress.mutate(newAddress)
+  }
+
+  const handleDeleteAddress = () => {
+    if (selectedAddressId) {
+      deleteAddress.mutate(selectedAddressId)
+      setOpenDeleteAddress(false)
+      setSelectedAddressId(null)
+    }
+  }
+
+  const handleSetDefaultAddress = (addressId: string) => {
+    setDefaultAddress.mutate(addressId)
   }
 
   return (
@@ -169,15 +192,22 @@ export default function Account() {
                                   Default
                                 </span>
                               ) : (
-                                <button className="px-4 py-1 text-xs rounded-full border border-brand hover:bg-brand/80 hover:text-background transition">
-                                  Set Default
+                                <button
+                                  onClick={() => handleSetDefaultAddress(address.id)}
+                                  className="px-4 py-1 text-xs rounded-full border border-brand hover:bg-brand/80 hover:text-background transition"
+                                  disabled={setDefaultAddress.isPending}
+                                >
+                                  {setDefaultAddress.isPending ? "Setting..." : "Set Default"}
                                 </button>
                               )}
 
                               <CommonButton
                                 variant="iconBtn"
                                 className="border-red-600 hover:bg-red-600 text-red-600 outline-0 ring-0"
-                                onClick={() => setOpenDeleteAddress(true)}
+                                onClick={() => {
+                                  setSelectedAddressId(address.id)
+                                  setOpenDeleteAddress(true)
+                                }}
                               >
                                 <Trash2 size={16} />
                               </CommonButton>
@@ -246,9 +276,7 @@ export default function Account() {
       <DeleteAddressConfirmModal
         open={openDeleteAddress}
         onClose={() => setOpenDeleteAddress(false)}
-        onConfirm={() => {
-          setOpenDeleteAddress(false)
-        }}
+        onConfirm={handleDeleteAddress}
       />
     </>
   )
