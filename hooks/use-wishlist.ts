@@ -47,9 +47,10 @@ export const useAddToWishlist = () => {
         queryClient.setQueryData(["wishlist"], context.previousWishlist)
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Set the returned data from API to ensure sync
+      queryClient.setQueryData(["wishlist"], data)
       queryClient.invalidateQueries({ queryKey: ["wishlist-count"] })
-      queryClient.invalidateQueries({ queryKey: ["wishlist"] })
     },
   })
 }
@@ -76,9 +77,10 @@ export const useRemoveFromWishlist = () => {
         queryClient.setQueryData(["wishlist"], context.previousWishlist)
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Set the returned data from API to ensure sync
+      queryClient.setQueryData(["wishlist"], data)
       queryClient.invalidateQueries({ queryKey: ["wishlist-count"] })
-      queryClient.invalidateQueries({ queryKey: ["wishlist"] })
     },
   })
 }

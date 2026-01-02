@@ -7,8 +7,8 @@ export const useAddAddress = () => {
 
   return useMutation({
     mutationFn: (addressData: Omit<Address, "id">) => addAddress(addressData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] })
+    onSuccess: (data) => {
+      queryClient.setQueryData(["user", "profile"], data)
     },
   })
 }
@@ -19,8 +19,8 @@ export const useUpdateAddress = () => {
   return useMutation({
     mutationFn: ({ addressId, addressData }: { addressId: string; addressData: Partial<Address> }) =>
       updateAddress(addressId, addressData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] })
+    onSuccess: (data) => {
+      queryClient.setQueryData(["user", "profile"], data)
     },
   })
 }
@@ -30,8 +30,8 @@ export const useDeleteAddress = () => {
 
   return useMutation({
     mutationFn: (addressId: string) => deleteAddress(addressId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] })
+    onSuccess: (data) => {
+      queryClient.setQueryData(["user", "profile"], data)
     },
   })
 }
@@ -41,8 +41,8 @@ export const useSetDefaultAddress = () => {
 
   return useMutation({
     mutationFn: (addressId: string) => setDefaultAddress(addressId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] })
+    onSuccess: (data) => {
+      queryClient.setQueryData(["user", "profile"], data)
     },
   })
 }
