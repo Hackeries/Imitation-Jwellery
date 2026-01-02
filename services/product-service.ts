@@ -107,16 +107,19 @@ const mockProducts: Product[] = [
 
 export const fetchProducts = async (filters: ProductFilters): Promise<ProductListResponse> => {
   // Mocking delay for demonstration
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  await new Promise((resolve) => setTimeout(resolve, 300))
 
   let products = [...mockProducts]
 
-  // Apply price filter
-  if (filters.minPrice !== undefined) {
-    products = products.filter((p) => parsePrice(p.price) >= filters.minPrice!)
-  }
-  if (filters.maxPrice !== undefined) {
-    products = products.filter((p) => parsePrice(p.price) <= filters.maxPrice!)
+  // Only apply price filter if it's different from default full range
+  if (filters.minPrice !== undefined && filters.maxPrice !== undefined) {
+    // Only filter if range is narrower than full range
+    if (filters.minPrice > 0 || filters.maxPrice < 1000) {
+      products = products.filter((p) => {
+        const priceNum = parsePrice(p.price)
+        return priceNum >= filters.minPrice! && priceNum <= filters.maxPrice!
+      })
+    }
   }
 
   // Apply sort

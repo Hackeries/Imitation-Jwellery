@@ -10,15 +10,12 @@ export interface Wishlist {
   items: WishlistItem[]
 }
 
-export const fetchWishlist = async (): Promise<Wishlist> => {
-  await new Promise((resolve) => setTimeout(resolve, 400))
+// In-memory store - starts EMPTY
+let wishlistStore: WishlistItem[] = []
 
-  return {
-    items: [
-      { id: "1", productId: "1", title: "Heart Gold Pendant", price: "Rs. 299.00", image: "/img/bracelet-img.webp" },
-      { id: "2", productId: "2", title: "Classic Fan Pendant", price: "Rs. 399.00", image: "/img/bracelets.webp" },
-    ],
-  }
+export const fetchWishlist = async (): Promise<Wishlist> => {
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  return { items: [...wishlistStore] }
 }
 
 export const addToWishlist = async (
@@ -27,38 +24,27 @@ export const addToWishlist = async (
   price: string,
   image: string,
 ): Promise<Wishlist> => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  // Simulate adding to existing wishlist
-  const mockWishlist = {
-    items: [
-      { id: "1", productId: "1", title: "Heart Gold Pendant", price: "Rs. 299.00", image: "/img/bracelet-img.webp" },
-      { id: "2", productId: "2", title: "Classic Fan Pendant", price: "Rs. 399.00", image: "/img/bracelets.webp" },
-    ],
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  
+  // Check if already exists
+  const exists = wishlistStore.some(item => item.productId === productId)
+  if (!exists) {
+    wishlistStore.push({
+      id: `wish-${Date.now()}`,
+      productId,
+      title,
+      price,
+      image,
+    })
   }
-
-  // Add new item if not already present
-  const itemExists = mockWishlist.items.some((item) => item.productId === productId)
-  if (!itemExists) {
-    mockWishlist.items.push({ id: productId, productId, title, price, image })
-  }
-
-  return { items: mockWishlist.items }
+  
+  return { items: [...wishlistStore] }
 }
 
 export const removeFromWishlist = async (wishlistItemId: string): Promise<Wishlist> => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  // Simulate removing the item from wishlist
-  const mockWishlist = {
-    items: [
-      { id: "1", productId: "1", title: "Heart Gold Pendant", price: "Rs. 299.00", image: "/img/bracelet-img.webp" },
-      { id: "2", productId: "2", title: "Classic Fan Pendant", price: "Rs. 399.00", image: "/img/bracelets.webp" },
-    ],
-  }
+  await new Promise((resolve) => setTimeout(resolve, 200))
   
-  // Filter out the removed item
-  const updatedItems = mockWishlist.items.filter((item) => item.id !== wishlistItemId)
+  wishlistStore = wishlistStore.filter(item => item.id !== wishlistItemId && item.productId !== wishlistItemId)
   
-  return { items: updatedItems }
+  return { items: [...wishlistStore] }
 }

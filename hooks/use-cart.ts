@@ -94,7 +94,8 @@ export const useRemoveFromCart = () => {
         queryClient.setQueryData(["cart"], context.previousCart)
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData(["cart"], data)
       queryClient.invalidateQueries({ queryKey: ["cart-count"] })
     },
   })
@@ -125,6 +126,10 @@ export const useUpdateCartQuantity = () => {
       if (context?.previousCart) {
         queryClient.setQueryData(["cart"], context.previousCart)
       }
+    },
+    onSuccess: (data) => {
+      // Set the returned cart data to ensure sync
+      queryClient.setQueryData(["cart"], data)
     },
   })
 }
