@@ -149,7 +149,7 @@ export default function ProductList() {
               products.map((product) => (
                 <CommonProductCard
                   key={product.id}
-                  productId={Number(product.id)}
+                  productId={parseInt(product.id, 10) || 1}
                   title={product.title}
                   price={product.price}
                   oldPrice={product.oldPrice}

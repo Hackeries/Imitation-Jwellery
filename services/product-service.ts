@@ -27,6 +27,19 @@ export interface ProductFilters {
   limit?: number
 }
 
+// API response types for better type safety
+interface APIWrappedResponse {
+  data?: Product[]
+  products?: Product[]
+  meta?: {
+    totalItems: number
+    totalPages: number
+    currentPage: number
+  }
+  totalPages?: number
+  currentPage?: number
+}
+
 /**
  * Fetch products from the backend API
  * @param filters - Optional filters for sorting, price range, and pagination
@@ -77,12 +90,15 @@ export const fetchProducts = async (filters: ProductFilters = {}): Promise<Produ
   }
   
   // If API returns { data, meta } structure
+  const wrappedData = data as APIWrappedResponse
+  const products = wrappedData.data || wrappedData.products || []
+  
   return {
-    data: data.data || data.products || [],
-    meta: data.meta || {
-      totalItems: (data.data || data.products || []).length,
-      totalPages: data.totalPages || 1,
-      currentPage: data.currentPage || filters.page || 1,
+    data: products,
+    meta: wrappedData.meta || {
+      totalItems: products.length,
+      totalPages: wrappedData.totalPages || 1,
+      currentPage: wrappedData.currentPage || filters.page || 1,
     },
   }
 }
