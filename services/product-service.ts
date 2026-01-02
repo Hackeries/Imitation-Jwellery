@@ -23,10 +23,13 @@ export interface ProductFilters {
   sort?: string
   minPrice?: number
   maxPrice?: number
-  inStock?: boolean
-  outOfStock?: boolean
   page?: number
   limit?: number
+}
+
+// Helper function to parse price from string
+const parsePrice = (priceStr: string): number => {
+  return parseFloat(priceStr.replace(/[^0-9.]/g, ""))
 }
 
 const mockProducts: Product[] = [
@@ -104,31 +107,17 @@ export const fetchProducts = async (filters: ProductFilters): Promise<ProductLis
 
   // Apply price filter
   if (filters.minPrice !== undefined) {
-    products = products.filter((p) => {
-      const priceNum = parseFloat(p.price.replace(/[^0-9.]/g, ""))
-      return priceNum >= filters.minPrice!
-    })
+    products = products.filter((p) => parsePrice(p.price) >= filters.minPrice!)
   }
   if (filters.maxPrice !== undefined) {
-    products = products.filter((p) => {
-      const priceNum = parseFloat(p.price.replace(/[^0-9.]/g, ""))
-      return priceNum <= filters.maxPrice!
-    })
+    products = products.filter((p) => parsePrice(p.price) <= filters.maxPrice!)
   }
 
   // Apply sort
   if (filters.sort === "price-asc") {
-    products.sort((a, b) => {
-      const priceA = parseFloat(a.price.replace(/[^0-9.]/g, ""))
-      const priceB = parseFloat(b.price.replace(/[^0-9.]/g, ""))
-      return priceA - priceB
-    })
+    products.sort((a, b) => parsePrice(a.price) - parsePrice(b.price))
   } else if (filters.sort === "price-desc") {
-    products.sort((a, b) => {
-      const priceA = parseFloat(a.price.replace(/[^0-9.]/g, ""))
-      const priceB = parseFloat(b.price.replace(/[^0-9.]/g, ""))
-      return priceB - priceA
-    })
+    products.sort((a, b) => parsePrice(b.price) - parsePrice(a.price))
   } else if (filters.sort === "az") {
     products.sort((a, b) => a.title.localeCompare(b.title))
   } else if (filters.sort === "za") {
