@@ -27,122 +27,62 @@ export interface ProductFilters {
   limit?: number
 }
 
-// Maximum price for product filtering
-const MAX_PRODUCT_PRICE = 1000
-
 /**
- * Helper function to parse price from string format (e.g., "Rs. 299.00")
- * Extracts numeric value by removing non-numeric characters except decimal point
- * @param priceStr - Price string in format "Rs. XXX.XX"
- * @returns Numeric price value, or 0 if parsing fails
+ * Fetch products from the backend API
+ * @param filters - Optional filters for sorting, price range, and pagination
+ * @returns Promise with product list response
  */
-const parsePrice = (priceStr: string): number => {
-  const parsed = parseFloat(priceStr.replace(/[^0-9.]/g, ""))
-  return isNaN(parsed) ? 0 : parsed
-}
+export const fetchProducts = async (filters: ProductFilters = {}): Promise<ProductListResponse> => {
+  // Build query parameters
+  const params = new URLSearchParams()
+  
+  if (filters.sort) {
+    params.append('sort', filters.sort)
+  }
+  if (filters.minPrice !== undefined) {
+    params.append('minPrice', String(filters.minPrice))
+  }
+  if (filters.maxPrice !== undefined) {
+    params.append('maxPrice', String(filters.maxPrice))
+  }
+  if (filters.page) {
+    params.append('page', String(filters.page))
+  }
+  if (filters.limit) {
+    params.append('limit', String(filters.limit))
+  }
 
-const mockProducts: Product[] = [
-  {
-    id: "1",
-    title: "Heart Gold Pendant",
-    price: "Rs. 299.00",
-    oldPrice: "Rs. 349.00",
-    image: "/img/bracelet-img.webp",
-    tag: { label: "New Arrival", variant: "primary" },
-  },
-  {
-    id: "2",
-    title: "Classic Fan Pendant",
-    price: "Rs. 399.00",
-    oldPrice: "Rs. 449.00",
-    image: "/img/bracelets.webp",
-  },
-  {
-    id: "3",
-    title: "Ruby Square Pendant",
-    price: "Rs. 499.00",
-    oldPrice: "Rs. 549.00",
-    image: "/img/earring.webp",
-  },
-  {
-    id: "4",
-    title: "Heart Gold Pendant",
-    price: "Rs. 299.00",
-    oldPrice: "Rs. 349.00",
-    image: "/img/bracelet-img.webp",
-  },
-  {
-    id: "5",
-    title: "Classic Fan Pendant",
-    price: "Rs. 399.00",
-    oldPrice: "Rs. 449.00",
-    image: "/img/bracelets.webp",
-  },
-  {
-    id: "6",
-    title: "Ruby Square Pendant",
-    price: "Rs. 499.00",
-    oldPrice: "Rs. 549.00",
-    image: "/img/earring.webp",
-  },
-  {
-    id: "7",
-    title: "Heart Gold Pendant",
-    price: "Rs. 299.00",
-    oldPrice: "Rs. 349.00",
-    image: "/img/bracelet-img.webp",
-  },
-  {
-    id: "8",
-    title: "Classic Fan Pendant",
-    price: "Rs. 399.00",
-    oldPrice: "Rs. 449.00",
-    image: "/img/bracelets.webp",
-  },
-  {
-    id: "9",
-    title: "Ruby Square Pendant",
-    price: "Rs. 499.00",
-    oldPrice: "Rs. 549.00",
-    image: "/img/earring.webp",
-  },
-]
+  const queryString = params.toString()
+  const url = `/api/v1/products${queryString ? `?${queryString}` : ''}`
 
-export const fetchProducts = async (filters: ProductFilters): Promise<ProductListResponse> => {
-  // Mocking delay for demonstration
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  const response = await fetch(url)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
+  }
 
-  let products = [...mockProducts]
-
-  // Only apply price filter if it's different from default full range
-  if (filters.minPrice !== undefined && filters.maxPrice !== undefined) {
-    // Only filter if range is narrower than full range
-    if (filters.minPrice > 0 || filters.maxPrice < MAX_PRODUCT_PRICE) {
-      products = products.filter((p) => {
-        const priceNum = parsePrice(p.price)
-        return priceNum >= filters.minPrice! && priceNum <= filters.maxPrice!
-      })
+  const data = await response.json()
+  
+  // Return data in expected format
+  // Handle both direct array response and wrapped response
+  if (Array.isArray(data)) {
+    return {
+      data: data,
+      meta: {
+        totalItems: data.length,
+        totalPages: 1,
+        currentPage: 1,
+      },
     }
   }
-
-  // Apply sort
-  if (filters.sort === "price-asc") {
-    products.sort((a, b) => parsePrice(a.price) - parsePrice(b.price))
-  } else if (filters.sort === "price-desc") {
-    products.sort((a, b) => parsePrice(b.price) - parsePrice(a.price))
-  } else if (filters.sort === "az") {
-    products.sort((a, b) => a.title.localeCompare(b.title))
-  } else if (filters.sort === "za") {
-    products.sort((a, b) => b.title.localeCompare(a.title))
-  }
-
-  // Returning filtered and sorted data
+  
+  // If API returns { data, meta } structure
   return {
-    data: products,
-    meta: {
-      totalItems: products.length,
-      totalPages: Math.ceil(products.length / (filters.limit || 50)),
-      currentPage: filters.page || 1,
+    data: data.data || data.products || [],
+    meta: data.meta || {
+      totalItems: (data.data || data.products || []).length,
+      totalPages: data.totalPages || 1,
+      currentPage: data.currentPage || filters.page || 1,
     },
   }
 }
