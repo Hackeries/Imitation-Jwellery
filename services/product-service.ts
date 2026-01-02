@@ -55,13 +55,13 @@ const transformProduct = (backendProduct: BackendProduct): Product => {
   const product: Product = {
     id: backendProduct._id,
     title: backendProduct.name,
-    price: `Rs. ${backendProduct.price.toLocaleString('en-IN')}.00`,
+    price: `Rs. ${backendProduct.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     image: backendProduct.thumbnail || backendProduct.images?.[0] || '/img/placeholder.webp',
   }
 
   // Add old price if MRP is higher than price
   if (backendProduct.mrp && backendProduct.mrp > backendProduct.price) {
-    product.oldPrice = `Rs. ${backendProduct.mrp.toLocaleString('en-IN')}.00`
+    product.oldPrice = `Rs. ${backendProduct.mrp.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
   // Add tag based on product flags
