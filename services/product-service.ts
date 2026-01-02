@@ -113,7 +113,7 @@ export const fetchProducts = async (filters: ProductFilters = {}): Promise<Produ
   let pagination = { page: 1, limit: 20, total: 0 }
 
   // Extract items array from nested structure
-  if (responseData.data && responseData.data.items && Array.isArray(responseData.data.items)) {
+  if (responseData.data?.items && Array.isArray(responseData.data.items)) {
     backendProducts = responseData.data.items
     pagination = responseData.data.pagination || pagination
   }
