@@ -68,26 +68,77 @@ export const fetchProducts = async (filters: ProductFilters = {}): Promise<Produ
 
   const responseData = await response.json()
   
-  // Handle different API response formats
-  // API might return: { data: [...], meta: {...} } or just [...]
+  // Log the response to debug (remove in production)
+  console.log('API Response:', responseData)
+  
+  // Handle various API response formats
+  let products: Product[] = []
+  let totalItems = 0
+  let totalPages = 1
+  let currentPage = filters.page || 1
+
+  // Case 1: Direct array response
   if (Array.isArray(responseData)) {
-    return {
-      data: responseData,
-      meta: {
-        totalItems: responseData.length,
-        totalPages: 1,
-        currentPage: 1,
-      },
+    products = responseData
+    totalItems = responseData.length
+  }
+  // Case 2: { success: true, data: [...] } or { data: [...] }
+  else if (responseData.data && Array.isArray(responseData.data)) {
+    products = responseData.data
+    totalItems = responseData.meta?.totalItems || responseData.total || responseData.count || products.length
+    totalPages = responseData.meta?.totalPages || responseData.totalPages || Math.ceil(totalItems / (filters.limit || 10))
+    currentPage = responseData.meta?.currentPage || responseData.currentPage || currentPage
+  }
+  // Case 3: { products: [...] }
+  else if (responseData.products && Array.isArray(responseData.products)) {
+    products = responseData.products
+    totalItems = responseData.total || responseData.count || responseData.totalItems || products.length
+    totalPages = responseData.totalPages || Math.ceil(totalItems / (filters.limit || 10))
+    currentPage = responseData.currentPage || responseData.page || currentPage
+  }
+  // Case 4: { items: [...] }
+  else if (responseData.items && Array.isArray(responseData.items)) {
+    products = responseData.items
+    totalItems = responseData.total || responseData.count || responseData.totalItems || products.length
+    totalPages = responseData.totalPages || Math.ceil(totalItems / (filters.limit || 10))
+    currentPage = responseData.currentPage || responseData.page || currentPage
+  }
+  // Case 5: { success: true, data: { products: [...] } } - nested
+  else if (responseData.success && responseData.data) {
+    if (Array.isArray(responseData.data)) {
+      products = responseData.data
+    } else if (responseData.data.products && Array.isArray(responseData.data.products)) {
+      products = responseData.data.products
+    } else if (responseData.data.items && Array.isArray(responseData.data.items)) {
+      products = responseData.data.items
+    }
+    totalItems = responseData.total || responseData.count || products.length
+    totalPages = responseData.totalPages || Math.ceil(totalItems / (filters.limit || 10))
+  }
+  // Fallback: try to extract any array from the response
+  else {
+    console.warn('Unexpected API response format:', responseData)
+    // Try to find any array in the response
+    for (const key of Object.keys(responseData)) {
+      if (Array.isArray(responseData[key])) {
+        products = responseData[key]
+        break
+      }
     }
   }
-  
-  // If API returns wrapped structure
+
+  // Ensure products is always an array
+  if (!Array.isArray(products)) {
+    console.error('Could not extract products array from API response:', responseData)
+    products = []
+  }
+
   return {
-    data: responseData.data || responseData.products || [],
-    meta: responseData.meta || {
-      totalItems: (responseData.data || responseData.products || []).length,
-      totalPages: responseData.totalPages || 1,
-      currentPage: responseData.currentPage || filters.page || 1,
+    data: products,
+    meta: {
+      totalItems,
+      totalPages,
+      currentPage,
     },
   }
 }
