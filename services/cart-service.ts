@@ -12,29 +12,18 @@ export interface Cart {
   total: number
 }
 
-export const fetchCart = async (): Promise<Cart> => {
-  await new Promise((resolve) => setTimeout(resolve, 400))
+// In-memory store - starts EMPTY
+let cartStore: CartItem[] = []
 
+const calculateTotal = (items: CartItem[]): number => {
+  return items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+}
+
+export const fetchCart = async (): Promise<Cart> => {
+  await new Promise((resolve) => setTimeout(resolve, 200))
   return {
-    items: [
-      {
-        id: "1",
-        productId: "1",
-        name: "NAIL & HOOP EARRING",
-        price: 799,
-        quantity: 1,
-        image: "/img/earring.webp",
-      },
-      {
-        id: "2",
-        productId: "2",
-        name: "GOLD PLATED DROP HOOP EARRING",
-        price: 199,
-        quantity: 1,
-        image: "/img/pendant.webp",
-      },
-    ],
-    total: 998,
+    items: [...cartStore],
+    total: calculateTotal(cartStore),
   }
 }
 
@@ -45,32 +34,55 @@ export const addToCart = async (
   image: string,
   quantity = 1,
 ): Promise<Cart> => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  await new Promise((resolve) => setTimeout(resolve, 200))
 
-  // Mock: return updated cart
+  const existingIndex = cartStore.findIndex(item => item.productId === productId)
+  
+  if (existingIndex >= 0) {
+    cartStore[existingIndex].quantity += quantity
+  } else {
+    cartStore.push({
+      id: `cart-${Date.now()}`,
+      productId,
+      name,
+      price,
+      quantity,
+      image,
+    })
+  }
+
   return {
-    items: [
-      {
-        id: productId,
-        productId,
-        name,
-        price,
-        quantity,
-        image,
-      },
-    ],
-    total: price * quantity,
+    items: [...cartStore],
+    total: calculateTotal(cartStore),
   }
 }
 
 export const removeFromCart = async (cartItemId: string): Promise<Cart> => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  return { items: [], total: 0 }
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  
+  cartStore = cartStore.filter(item => item.id !== cartItemId)
+  
+  return {
+    items: [...cartStore],
+    total: calculateTotal(cartStore),
+  }
 }
 
 export const updateCartQuantity = async (cartItemId: string, quantity: number): Promise<Cart> => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  await new Promise((resolve) => setTimeout(resolve, 200))
 
-  return { items: [], total: 0 }
+  if (quantity <= 0) {
+    // Remove item if quantity is 0 or less
+    cartStore = cartStore.filter(item => item.id !== cartItemId)
+  } else {
+    const item = cartStore.find(item => item.id === cartItemId)
+    if (item) {
+      item.quantity = quantity
+    }
+  }
+
+  return {
+    items: [...cartStore],
+    total: calculateTotal(cartStore),
+  }
 }
