@@ -22,7 +22,8 @@ import { usePathname, useRouter } from "next/navigation";
  * Fully functional Header with strict types.
  * - Counters update live via custom events from hooks.
  * - No `any` usage; type guards for union hook return types.
- * - Sign-in/out works: if your use-auth doesn’t export a sign-out hook, we call POST /api/auth/sign-out.
+ * - Sign-in/out works:  if your use-auth doesn't export a sign-out hook, we call POST /api/auth/sign-out.
+ * - Category links now use dynamic routes (/pendant, /necklace, etc.)
  */
 
 type QueryNumber = { data: number };
@@ -87,44 +88,32 @@ export default function Header() {
       {/* Promo Marquee */}
       <div className="group overflow-hidden bg-brand">
         <div
-          className="flex w-max gap-20 px-8 py-2.5 whitespace-nowrap animate-marquee"
+          className="flex w-max gap-20 px-8 py-2. 5 whitespace-nowrap animate-marquee"
           aria-label="Promotions"
         >
           {[...Array(2)].map((_, i) => (
             <div key={i} className="flex gap-20">
               <p className="uppercase text-xs font-normal text-background">
                 Buy any 3 Products, get 20% off{" "}
-                <Link
-                  href="/product-list"
-                  className="underline underline-offset-2"
-                >
+                <Link href="/necklace" className="underline underline-offset-2">
                   Shop Now
                 </Link>
               </p>
               <p className="uppercase text-xs font-normal text-background">
                 Buy any 3 Products, get 20% off{" "}
-                <Link
-                  href="/product-list"
-                  className="underline underline-offset-2"
-                >
+                <Link href="/earring" className="underline underline-offset-2">
                   Shop Now
                 </Link>
               </p>
               <p className="uppercase text-xs font-normal text-background">
                 Buy any 3 Products, get 20% off{" "}
-                <Link
-                  href="/product-list"
-                  className="underline underline-offset-2"
-                >
+                <Link href="/pendant" className="underline underline-offset-2">
                   Shop Now
                 </Link>
               </p>
               <p className="uppercase text-xs font-normal text-background">
                 Buy any 3 Products, get 20% off{" "}
-                <Link
-                  href="/product-list"
-                  className="underline underline-offset-2"
-                >
+                <Link href="/bracelet" className="underline underline-offset-2">
                   Shop Now
                 </Link>
               </p>
@@ -134,12 +123,12 @@ export default function Header() {
       </div>
 
       {/* Header */}
-      <header className="headerWrap sticky top-0 left-0 w-full h-fit bg-[#fce9ca] px-3 md:px-6 py-2 md:py-3.5 lg:px-8">
+      <header className="headerWrap sticky top-0 left-0 w-full h-fit bg-[#fce9ca] px-3 md:px-6 py-2 md:py-3. 5 lg:px-8">
         <nav
           aria-label="Global"
           className="flex items-center justify-between max-w-[1560px] mx-auto"
         >
-          {/* Mobile: left controls */}
+          {/* Mobile:  left controls */}
           <div className="flex items-center gap-2 lg:hidden">
             <button
               type="button"
@@ -157,7 +146,7 @@ export default function Header() {
               aria-label="Search"
               title="Search"
               onClick={handleOpenSearch}
-              className="font-semibold text-foreground p-1.5"
+              className="font-semibold text-foreground p-1. 5"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -193,7 +182,7 @@ export default function Header() {
             </p>
           </div>
 
-          {/* Mobile: right counters */}
+          {/* Mobile:  right counters */}
           <div className="flex lg:hidden items-center gap-2">
             {/* Wishlist */}
             <Link
@@ -243,7 +232,7 @@ export default function Header() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+                  d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c. 07.665-. 45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c. 576 0 1. 059. 435 1.119 1.007ZM8.625 10.5a. 375.375 0 1 1-. 75 0 . 375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
                 />
               </svg>
               {cartCount > 0 && (
@@ -254,7 +243,7 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Desktop: nav links */}
+          {/* Desktop: nav links - UPDATED to use dynamic category routes */}
           <div className="hidden lg:flex lg:gap-x-6 webHeaderLinksWrap">
             <Link
               href="/"
@@ -269,31 +258,31 @@ export default function Header() {
               About Us
             </Link>
             <Link
-              href="/product-list?type=bracelet"
+              href="/bracelet"
               className="py-1 px-2 text-sm/6 font-medium text-foreground uppercase"
             >
               Bracelet
             </Link>
             <Link
-              href="/product-list?type=earring"
+              href="/earring"
               className="py-1 px-2 text-sm/6 font-medium text-foreground uppercase"
             >
               Earring
             </Link>
             <Link
-              href="/product-list?type=necklace"
+              href="/necklace"
               className="py-1 px-2 text-sm/6 font-medium text-foreground uppercase"
             >
               Necklace
             </Link>
             <Link
-              href="/product-list?type=jewelry-set"
+              href="/jewelry-set"
               className="py-1 px-2 text-sm/6 font-medium text-foreground uppercase"
             >
               Jewelry Set
             </Link>
             <Link
-              href="/product-list?type=pendant"
+              href="/pendant"
               className="py-1 px-2 text-sm/6 font-medium text-foreground uppercase"
             >
               Pendant
@@ -306,8 +295,8 @@ export default function Header() {
             </Link>
           </div>
 
-          {/* Desktop: actions */}
-          <div className="hidden lg:flex lg:gap-3 lg:flex-1 lg:justify-end items-center">
+          {/* Desktop:  actions */}
+          <div className="hidden lg:flex lg: gap-3 lg:flex-1 lg:justify-end items-center">
             {/* Search */}
             <button
               type="button"
@@ -381,7 +370,7 @@ export default function Header() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+                  d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c. 576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
                 />
               </svg>
               {cartCount > 0 && (
@@ -396,7 +385,7 @@ export default function Header() {
               <MenuButton
                 aria-label="User menu"
                 title="User menu"
-                className="cursor-pointer inline-flex items-center gap-2 rounded-md bg-transparent px-3 py-1.5 text-sm/6 font-semibold text-foreground outline-0"
+                className="cursor-pointer inline-flex items-center gap-2 rounded-md bg-transparent px-3 py-1. 5 text-sm/6 font-semibold text-foreground outline-0"
               >
                 <div className="relative h-10 w-10 min-w-10 rounded-full overflow-hidden bg-background text-foreground flex items-center justify-center">
                   <svg
@@ -424,7 +413,7 @@ export default function Header() {
               <MenuItems
                 transition
                 anchor="bottom end"
-                className="w-52 origin-top-right rounded-xl border border-foreground/20 bg-background p-1 text-sm/6 text-foreground transition duration-100 ease-out [--anchor-gap:--spacing(1)] focus:outline-none data-closed:scale-95 data-closed:opacity-0 z-[99]"
+                className="w-52 origin-top-right rounded-xl border border-foreground/20 bg-background p-1 text-sm/6 text-foreground transition duration-100 ease-out [--anchor-gap: --spacing(1)] focus:outline-none data-closed: scale-95 data-closed:opacity-0 z-[99]"
               >
                 {/* Account */}
                 <MenuItem>
@@ -494,7 +483,7 @@ export default function Header() {
             className="lg:hidden"
           >
             <div className="fixed inset-0 z-50" />
-            <DialogPanel className="mobileMenuWrap fixed inset-y-0 left-0 z-50 w-full overflow-y-auto bg-[#fce9ca] p-0 sm:max-w-sm sm:ring-1 sm:ring-gray-900/10">
+            <DialogPanel className="mobileMenuWrap fixed inset-y-0 left-0 z-50 w-full overflow-y-auto bg-[#fce9ca] p-0 sm:max-w-sm sm:ring-1 sm: ring-gray-900/10">
               <div className="flex items-center justify-between p-4">
                 <Link
                   href="/"
@@ -518,7 +507,7 @@ export default function Header() {
 
               <div className="pt-2 flow-root">
                 <div className="divide-y divide-gray-500/10">
-                  {/* Links */}
+                  {/* Links - UPDATED to use dynamic category routes */}
                   <div className="flex flex-col gap-x-6 pb-2">
                     <Link
                       href="/"
@@ -535,35 +524,35 @@ export default function Header() {
                       About Us
                     </Link>
                     <Link
-                      href="/product-list?type=bracelet"
+                      href="/bracelet"
                       onClick={handleMobileLinkClick}
                       className="py-2 px-4 text-sm/6 font-medium text-foreground uppercase"
                     >
                       Bracelet
                     </Link>
                     <Link
-                      href="/product-list?type=earring"
+                      href="/earring"
                       onClick={handleMobileLinkClick}
                       className="py-2 px-4 text-sm/6 font-medium text-foreground uppercase"
                     >
                       Earring
                     </Link>
                     <Link
-                      href="/product-list?type=necklace"
+                      href="/necklace"
                       onClick={handleMobileLinkClick}
                       className="py-2 px-4 text-sm/6 font-medium text-foreground uppercase"
                     >
                       Necklace
                     </Link>
                     <Link
-                      href="/product-list?type=jewelry-set"
+                      href="/jewelry-set"
                       onClick={handleMobileLinkClick}
                       className="py-2 px-4 text-sm/6 font-medium text-foreground uppercase"
                     >
                       Jewelry Set
                     </Link>
                     <Link
-                      href="/product-list?type=pendant"
+                      href="/pendant"
                       onClick={handleMobileLinkClick}
                       className="py-2 px-4 text-sm/6 font-medium text-foreground uppercase"
                     >
@@ -597,7 +586,7 @@ export default function Header() {
                         <Link
                           href="/account"
                           onClick={handleMobileLinkClick}
-                          className="text-sm/6 font-medium uppercase flex w/full items-center gap-2 rounded-lg px-4 py-2 data-focus:bg-foreground/10 text-foreground"
+                          className="text-sm/6 font-medium uppercase flex w-full items-center gap-2 rounded-lg px-4 py-2 data-focus:bg-foreground/10 text-foreground"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"

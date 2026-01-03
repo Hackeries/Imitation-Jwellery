@@ -1,3 +1,5 @@
+// hooks/use-products.ts
+
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   fetchProducts,
@@ -23,7 +25,7 @@ export const useProductsInfinite = (
     queryKey: ["products", "infinite", filters],
     queryFn: ({ pageParam }) =>
       fetchProducts({ ...filters, page: pageParam as number }),
-    initialPageParam: 1, // required for TS and pagination start
+    initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const current = lastPage?.meta?.currentPage ?? 1;
       const totalPages = lastPage?.meta?.totalPages ?? 1;
@@ -32,5 +34,35 @@ export const useProductsInfinite = (
     },
     staleTime: 1000 * 60 * 5,
     retry: 2,
+  });
+};
+
+// NEW: Hook specifically for category-based product listing
+export const useProductsByCategory = (
+  categorySlug: string,
+  additionalFilters: Omit<
+    ProductFilters,
+    "categorySlug" | "page" | "limit"
+  > = {}
+) => {
+  const filters = {
+    ...additionalFilters,
+    categorySlug,
+  };
+
+  return useInfiniteQuery<ProductListResponse, Error>({
+    queryKey: ["products", "category", categorySlug, additionalFilters],
+    queryFn: ({ pageParam }) =>
+      fetchProducts({ ...filters, page: pageParam as number }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const current = lastPage?.meta?.currentPage ?? 1;
+      const totalPages = lastPage?.meta?.totalPages ?? 1;
+      const next = current + 1;
+      return next <= totalPages ? next : undefined;
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 2,
+    enabled: !!categorySlug, // Only fetch when categorySlug is provided
   });
 };

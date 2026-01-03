@@ -1,153 +1,186 @@
+"use client";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchCart,
   addToCart,
   removeFromCart,
   updateCartQuantity,
+  clearCart,
   type Cart,
 } from "@/services/cart-service";
 
 export const useCart = () => {
-  return useQuery({
+  return useQuery<Cart, Error>({
     queryKey: ["cart"],
     queryFn: fetchCart,
-    staleTime: 1000 * 60, // 1 minute
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
   });
 };
 
-export const useAddToCart = () => {
-  const queryClient = useQueryClient();
+export const useCartCount = () => {
+  const { data } = useCart();
+  return data?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+};
 
-  return useMutation({
-    mutationFn: ({
-      productId,
-      name,
-      price,
-      image,
-      quantity,
-    }: {
+export const useCartTotal = () => {
+  const { data } = useCart();
+  return data?.total ?? 0;
+};
+
+export const useAddToCart = () => {
+  const qc = useQueryClient();
+
+  return useMutation<
+    Cart,
+    Error,
+    {
       productId: string;
       name: string;
       price: number;
       image: string;
       quantity?: number;
-    }) => addToCart(productId, name, price, image, quantity),
-    onMutate: async (newItem) => {
-      await queryClient.cancelQueries({ queryKey: ["cart"] });
-      const previousCart = queryClient.getQueryData<Cart>(["cart"]);
+    },
+    { prev?: Cart }
+  >({
+    mutationFn: ({ productId, name, price, image, quantity = 1 }) =>
+      addToCart(productId, name, price, image, quantity),
+    onMutate: async ({ productId, name, price, image, quantity = 1 }) => {
+      await qc.cancelQueries({ queryKey: ["cart"] });
+      const prev = qc.getQueryData<Cart>(["cart"]) ?? { items: [], total: 0 };
 
-      if (previousCart) {
-        const updatedItems = [...previousCart.items];
-        const idx = updatedItems.findIndex(
-          (item) => item.productId === newItem.productId
+      // Optimistic update
+      const existingIndex = prev.items.findIndex(
+        (i) => i.productId === productId
+      );
+      let newItems;
+      if (existingIndex >= 0) {
+        newItems = prev.items.map((item, idx) =>
+          idx === existingIndex
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
         );
-        if (idx !== -1) {
-          updatedItems[idx] = {
-            ...updatedItems[idx],
-            quantity: updatedItems[idx].quantity + (newItem.quantity || 1),
-          };
-        } else {
-          updatedItems.push({
-            id: newItem.productId,
-            productId: newItem.productId,
-            name: newItem.name,
-            price: newItem.price,
-            quantity: newItem.quantity || 1,
-            image: newItem.image,
-          });
-        }
-        queryClient.setQueryData(["cart"], {
-          items: updatedItems,
-          total: updatedItems.reduce((s, i) => s + i.price * i.quantity, 0),
-        });
+      } else {
+        newItems = [
+          ...prev.items,
+          {
+            id: `temp-${productId}`,
+            productId,
+            name,
+            price,
+            quantity,
+            image,
+          },
+        ];
       }
 
-      return { previousCart };
+      const newTotal = newItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      qc.setQueryData<Cart>(["cart"], { items: newItems, total: newTotal });
+      return { prev };
     },
-    onError: (_err, _newItem, ctx) => {
-      if (ctx?.previousCart)
-        queryClient.setQueryData(["cart"], ctx.previousCart);
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["cart"], data);
-      queryClient.invalidateQueries({ queryKey: ["cart-count"] });
+    onSuccess: (cart) => {
+      qc.setQueryData<Cart>(["cart"], cart);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["cart"] });
     },
   });
 };
 
 export const useRemoveFromCart = () => {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
 
-  return useMutation({
+  return useMutation<Cart, Error, string, { prev?: Cart }>({
     mutationFn: (cartItemId: string) => removeFromCart(cartItemId),
     onMutate: async (cartItemId) => {
-      await queryClient.cancelQueries({ queryKey: ["cart"] });
-      const previousCart = queryClient.getQueryData<Cart>(["cart"]);
+      await qc.cancelQueries({ queryKey: ["cart"] });
+      const prev = qc.getQueryData<Cart>(["cart"]) ?? { items: [], total: 0 };
 
-      if (previousCart) {
-        const updatedItems = previousCart.items.filter(
-          (item) => item.id !== cartItemId
-        );
-        queryClient.setQueryData(["cart"], {
-          items: updatedItems,
-          total: updatedItems.reduce((s, i) => s + i.price * i.quantity, 0),
-        });
-      }
+      // Optimistic removal
+      const newItems = prev.items.filter((i) => i.id !== cartItemId);
+      const newTotal = newItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
 
-      return { previousCart };
+      qc.setQueryData<Cart>(["cart"], { items: newItems, total: newTotal });
+      return { prev };
     },
     onError: (_err, _id, ctx) => {
-      if (ctx?.previousCart)
-        queryClient.setQueryData(["cart"], ctx.previousCart);
+      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
     },
-    onSuccess: (data) => {
-      // Ensure we sync with server state (we refetch inside service, but set anyway)
-      queryClient.setQueryData(["cart"], data);
-      queryClient.invalidateQueries({ queryKey: ["cart-count"] });
+    onSuccess: (cart) => {
+      qc.setQueryData<Cart>(["cart"], cart);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["cart"] });
     },
   });
 };
 
 export const useUpdateCartQuantity = () => {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({
-      cartItemId,
-      quantity,
-    }: {
-      cartItemId: string;
-      quantity: number;
-    }) => updateCartQuantity(cartItemId, quantity),
+  return useMutation<
+    Cart,
+    Error,
+    { cartItemId: string; quantity: number },
+    { prev?: Cart }
+  >({
+    mutationFn: ({ cartItemId, quantity }) =>
+      updateCartQuantity(cartItemId, quantity),
     onMutate: async ({ cartItemId, quantity }) => {
-      await queryClient.cancelQueries({ queryKey: ["cart"] });
-      const previousCart = queryClient.getQueryData<Cart>(["cart"]);
+      await qc.cancelQueries({ queryKey: ["cart"] });
+      const prev = qc.getQueryData<Cart>(["cart"]) ?? { items: [], total: 0 };
 
-      if (previousCart) {
-        const updatedItems = previousCart.items.map((item) =>
+      // Optimistic update
+      let newItems;
+      if (quantity <= 0) {
+        newItems = prev.items.filter((i) => i.id !== cartItemId);
+      } else {
+        newItems = prev.items.map((item) =>
           item.id === cartItemId ? { ...item, quantity } : item
         );
-        queryClient.setQueryData(["cart"], {
-          items: updatedItems,
-          total: updatedItems.reduce((s, i) => s + i.price * i.quantity, 0),
-        });
       }
 
-      return { previousCart };
+      const newTotal = newItems.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      qc.setQueryData<Cart>(["cart"], { items: newItems, total: newTotal });
+      return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.previousCart)
-        queryClient.setQueryData(["cart"], ctx.previousCart);
+      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["cart"], data);
-      queryClient.invalidateQueries({ queryKey: ["cart-count"] });
+    onSuccess: (cart) => {
+      qc.setQueryData<Cart>(["cart"], cart);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["cart"] });
     },
   });
 };
 
-export const useCartCount = () => {
-  const { data: cart } = useCart();
-  const count = Array.isArray(cart?.items) ? cart!.items.length : 0;
-  return { data: count };
+export const useClearCart = () => {
+  const qc = useQueryClient();
+
+  return useMutation<Cart, Error, void>({
+    mutationFn: () => clearCart(),
+    onSuccess: (cart) => {
+      qc.setQueryData<Cart>(["cart"], cart);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["cart"] });
+    },
+  });
 };

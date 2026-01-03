@@ -7,7 +7,6 @@ import {
   removeWishlistItem,
   clearWishlist,
   type Wishlist,
-  type WishlistItem,
   type ProductLike,
 } from "@/services/wishlist-service";
 
@@ -15,8 +14,10 @@ export const useWishlist = () => {
   return useQuery<Wishlist, Error>({
     queryKey: ["wishlist"],
     queryFn: getWishlist,
-    staleTime: 1000 * 60 * 10,
-    retry: 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 30, // 30 minutes
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -27,81 +28,136 @@ export const useWishlistCount = () => {
 
 export const useIsWishlisted = (productId: string | number) => {
   const { data } = useWishlist();
-  return !!data?.items?.some((i) => i.productId === String(productId));
+  const isWishlisted = Boolean(
+    data?.items?.some((i) => i.productId === String(productId))
+  );
+  return { data: isWishlisted, isWishlisted };
 };
 
 export const useAddToWishlist = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  return useMutation<Wishlist, Error, ProductLike, { prev?: Wishlist }>({
+  return useMutation<
+    Wishlist,
+    Error,
+    ProductLike,
+    { previousWishlist?: Wishlist }
+  >({
     mutationFn: (product) => addWishlistItem(product),
     onMutate: async (product) => {
-      await qc.cancelQueries({ queryKey: ["wishlist"] });
-      const prev = qc.getQueryData<Wishlist>(["wishlist"]) ?? { items: [] };
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["wishlist"] });
 
-      // Optimistic update
-      const exists = prev.items.some((i) => i.productId === product.productId);
-      const next: Wishlist = exists
-        ? prev
-        : {
-            items: [
-              ...prev.items,
-              {
-                id: product.productId,
-                productId: product.productId,
-                title: product.title,
-                price: product.price,
-                image: product.image,
-              },
-            ],
-          };
+      // Snapshot the previous value
+      const previousWishlist = queryClient.getQueryData<Wishlist>([
+        "wishlist",
+      ]) ?? { items: [] };
 
-      qc.setQueryData<Wishlist>(["wishlist"], next);
-      return { prev };
+      // Optimistically update to the new value
+      const exists = previousWishlist.items.some(
+        (i) => i.productId === product.productId
+      );
+      if (!exists) {
+        const optimisticWishlist: Wishlist = {
+          items: [
+            ...previousWishlist.items,
+            {
+              id: product.productId,
+              productId: product.productId,
+              title: product.title,
+              price: product.price,
+              image: product.image,
+            },
+          ],
+        };
+        queryClient.setQueryData<Wishlist>(["wishlist"], optimisticWishlist);
+      }
+
+      return { previousWishlist };
     },
-    onError: (_err, _product, ctx) => {
-      if (ctx?.prev) qc.setQueryData<Wishlist>(["wishlist"], ctx.prev);
+    onError: (_err, _product, context) => {
+      // Roll back to the previous value on error
+      if (context?.previousWishlist) {
+        queryClient.setQueryData<Wishlist>(
+          ["wishlist"],
+          context.previousWishlist
+        );
+      }
     },
-    onSuccess: (wl) => {
-      qc.setQueryData<Wishlist>(["wishlist"], wl);
+    onSuccess: (updatedWishlist) => {
+      // Update with the actual server response
+      queryClient.setQueryData<Wishlist>(["wishlist"], updatedWishlist);
+    },
+    onSettled: () => {
+      // Invalidate to refetch in background
+      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
     },
   });
 };
 
 export const useRemoveFromWishlist = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  return useMutation<Wishlist, Error, string, { prev?: Wishlist }>({
+  return useMutation<Wishlist, Error, string, { previousWishlist?: Wishlist }>({
     mutationFn: (idOrProductId) => removeWishlistItem(idOrProductId),
     onMutate: async (idOrProductId) => {
-      await qc.cancelQueries({ queryKey: ["wishlist"] });
-      const prev = qc.getQueryData<Wishlist>(["wishlist"]) ?? { items: [] };
+      await queryClient.cancelQueries({ queryKey: ["wishlist"] });
 
-      // Optimistic removal by either id or productId
-      const next: Wishlist = {
-        items: prev.items.filter(
+      const previousWishlist = queryClient.getQueryData<Wishlist>([
+        "wishlist",
+      ]) ?? { items: [] };
+
+      // Optimistically remove the item
+      const optimisticWishlist: Wishlist = {
+        items: previousWishlist.items.filter(
           (i) => i.id !== idOrProductId && i.productId !== idOrProductId
         ),
       };
+      queryClient.setQueryData<Wishlist>(["wishlist"], optimisticWishlist);
 
-      qc.setQueryData<Wishlist>(["wishlist"], next);
-      return { prev };
+      return { previousWishlist };
     },
-    onError: (_err, _id, ctx) => {
-      if (ctx?.prev) qc.setQueryData<Wishlist>(["wishlist"], ctx.prev);
+    onError: (_err, _id, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData<Wishlist>(
+          ["wishlist"],
+          context.previousWishlist
+        );
+      }
     },
-    onSuccess: (wl) => {
-      qc.setQueryData<Wishlist>(["wishlist"], wl);
+    onSuccess: (updatedWishlist) => {
+      queryClient.setQueryData<Wishlist>(["wishlist"], updatedWishlist);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["wishlist"] });
     },
   });
 };
 
 export const useClearWishlist = () => {
-  const qc = useQueryClient();
-  return useMutation<Wishlist, Error, void>({
+  const queryClient = useQueryClient();
+
+  return useMutation<Wishlist, Error, void, { previousWishlist?: Wishlist }>({
     mutationFn: () => clearWishlist(),
-    onSuccess: (wl) => {
-      qc.setQueryData<Wishlist>(["wishlist"], wl);
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["wishlist"] });
+      const previousWishlist = queryClient.getQueryData<Wishlist>(["wishlist"]);
+      queryClient.setQueryData<Wishlist>(["wishlist"], { items: [] });
+      return { previousWishlist };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousWishlist) {
+        queryClient.setQueryData<Wishlist>(
+          ["wishlist"],
+          context.previousWishlist
+        );
+      }
+    },
+    onSuccess: (updatedWishlist) => {
+      queryClient.setQueryData<Wishlist>(["wishlist"], updatedWishlist);
     },
   });
 };
+
+// Re-export types for convenience
+export type { Wishlist, ProductLike };
