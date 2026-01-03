@@ -1,4 +1,4 @@
-// services/category-service. ts
+// services/category-service.ts
 
 export interface Category {
   id: string;
@@ -22,11 +22,16 @@ interface BackendCategory {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
-// Cache for slug -> categoryId mapping
+/* --------------------------------------------------
+   INTERNAL CACHE
+-------------------------------------------------- */
 let categoryCache: Map<string, Category> | null = null;
-let cacheTimestamp: number = 0;
-const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+let cacheTimestamp = 0;
+const CACHE_TTL = 1000 * 60 * 10;
 
+/* --------------------------------------------------
+   TRANSFORM
+-------------------------------------------------- */
 const transformCategory = (backend: BackendCategory): Category => ({
   id: backend._id,
   title: backend.title,
@@ -37,31 +42,32 @@ const transformCategory = (backend: BackendCategory): Category => ({
   type: backend.type,
 });
 
+/* --------------------------------------------------
+   FETCH CATEGORIES (FIXED ENDPOINT)
+-------------------------------------------------- */
 export const fetchCategories = async (): Promise<Category[]> => {
-  const url = `${API_BASE_URL}/api/v1/product-categories? isActive=true&type=category`;
+  try {
+    // ✅ FIX: product-categories (plural)
+    const url = `${API_BASE_URL}/api/v1/product-categories?isActive=true&type=category`;
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch categories: ${response.status}`);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch categories ${res.status}`);
+    }
+
+    const json = await res.json();
+    const items: BackendCategory[] = json?.data?.items ?? [];
+
+    return items.map(transformCategory);
+  } catch (err) {
+    console.error("fetchCategories failed", err);
+    return [];
   }
-
-  const responseData = await response.json();
-
-  let backendCategories: BackendCategory[] = [];
-
-  if (responseData.data?.items && Array.isArray(responseData.data.items)) {
-    backendCategories = responseData.data.items;
-  } else if (responseData.data && Array.isArray(responseData.data)) {
-    backendCategories = responseData.data;
-  } else if (responseData.items && Array.isArray(responseData.items)) {
-    backendCategories = responseData.items;
-  } else if (Array.isArray(responseData)) {
-    backendCategories = responseData;
-  }
-
-  return backendCategories.map(transformCategory);
 };
 
+/* --------------------------------------------------
+   CACHE HANDLING
+-------------------------------------------------- */
 const ensureCache = async (): Promise<Map<string, Category>> => {
   const now = Date.now();
 
@@ -70,28 +76,32 @@ const ensureCache = async (): Promise<Map<string, Category>> => {
   }
 
   const categories = await fetchCategories();
-  categoryCache = new Map();
+  const map = new Map<string, Category>();
 
   for (const cat of categories) {
-    categoryCache.set(cat.slug.toLowerCase(), cat);
+    map.set(cat.slug.toLowerCase(), cat);
   }
 
+  categoryCache = map;
   cacheTimestamp = now;
-  return categoryCache;
+  return map;
 };
 
+/* --------------------------------------------------
+   PUBLIC HELPERS
+-------------------------------------------------- */
 export const getCategoryBySlug = async (
   slug: string
 ): Promise<Category | null> => {
   const cache = await ensureCache();
-  return cache.get(slug.toLowerCase()) || null;
+  return cache.get(slug.toLowerCase()) ?? null;
 };
 
 export const getCategoryIdBySlug = async (
   slug: string
 ): Promise<string | null> => {
-  const category = await getCategoryBySlug(slug);
-  return category?.id || null;
+  const cat = await getCategoryBySlug(slug);
+  return cat?.id ?? null;
 };
 
 export const clearCategoryCache = (): void => {
@@ -99,9 +109,11 @@ export const clearCategoryCache = (): void => {
   cacheTimestamp = 0;
 };
 
-// Display name mapping for category titles
+/* --------------------------------------------------
+   DISPLAY NAME
+-------------------------------------------------- */
 export const getCategoryDisplayName = (slug: string): string => {
-  const displayNames: Record<string, string> = {
+  const map: Record<string, string> = {
     pendant: "Pendant",
     necklace: "Necklace",
     earring: "Earring",
@@ -110,8 +122,5 @@ export const getCategoryDisplayName = (slug: string): string => {
     ring: "Ring",
   };
 
-  return (
-    displayNames[slug.toLowerCase()] ||
-    slug.charAt(0).toUpperCase() + slug.slice(1).replace(/-/g, " ")
-  );
+  return map[slug] || slug.replace(/-/g, " ");
 };

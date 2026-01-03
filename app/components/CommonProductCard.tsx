@@ -1,118 +1,123 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Heart } from "lucide-react";
+import CommonButton from "./button/CommonButton";
+import {
+  useAddToWishlist,
+  useRemoveFromWishlist,
+  useIsWishlisted,
+} from "@/hooks/use-wishlist";
+import { useAddToCart } from "@/hooks/use-cart";
 
-import Image from "next/image"
-import Link from "next/link"
-import { Heart } from "lucide-react"
-import { useState } from "react"
-import CommonButton from "./button/CommonButton"
-import { useAddToWishlist, useRemoveFromWishlist } from "@/hooks/use-wishlist"
-import { useAddToCart } from "@/hooks/use-cart"
-
-type ProductTagVariant = "primary" | "secondary"
+type ProductTagVariant = "primary" | "secondary";
 
 type ProductTag = {
-  label: string
-  variant?: ProductTagVariant
-}
+  label: string;
+  variant?: ProductTagVariant;
+};
 
 type CommonProductCardProps = {
-  title: string
-  price: string
-  image: string
-  productId?: number
-  oldPrice?: string
+  title: string;
+  price: string;
+  image: string;
 
-  defaultWishlisted?: boolean
-  alwaysShowWishlistIcon?: boolean
-  showAddToCart?: boolean
-  onAddToCart?: () => void
-  tag?: ProductTag
-}
+  /** MUST be string – backend uses string IDs */
+  productId: string;
+
+  oldPrice?: string;
+  alwaysShowWishlistIcon?: boolean;
+  showAddToCart?: boolean;
+  onAddToCart?: () => void;
+  tag?: ProductTag;
+};
 
 export default function CommonProductCard({
   title,
   price,
   image,
-  productId = 1,
-  defaultWishlisted = false,
+  productId,
   alwaysShowWishlistIcon = false,
   showAddToCart = true,
   onAddToCart,
   oldPrice,
   tag,
 }: CommonProductCardProps) {
-  const [isWishlisted, setIsWishlisted] = useState(defaultWishlisted)
+  /** wishlist state */
+  const { isWishlisted } = useIsWishlisted(productId);
 
-  const addToWishlist = useAddToWishlist()
-  const removeFromWishlist = useRemoveFromWishlist()
-  const addToCart = useAddToCart()
+  const addToWishlist = useAddToWishlist();
+  const removeFromWishlist = useRemoveFromWishlist();
+  const addToCart = useAddToCart();
 
+  /** toggle wishlist */
   const handleWishlistToggle = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
+    e.preventDefault();
+    e.stopPropagation();
 
     if (isWishlisted) {
-      removeFromWishlist.mutate(String(productId))
+      removeFromWishlist.mutate(productId);
     } else {
       addToWishlist.mutate({
-        productId: String(productId),
+        productId,
         title,
         price,
         image,
-      })
+      });
     }
-    setIsWishlisted((prev) => !prev)
-  }
+  };
 
+  /** add to cart */
   const handleAddToCart = (e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation()
-    }
-    // Parse price to number, removing currency symbols and commas
-    const priceNumber = parseFloat(price.replace(/[^0-9.]/g, ""))
+    e?.stopPropagation();
+
+    const priceNumber = Number(price.replace(/[^0-9.]/g, ""));
+
     addToCart.mutate({
-      productId: String(productId),
+      productId,
       name: title,
       price: priceNumber,
       image,
       quantity: 1,
-    })
-    onAddToCart?.()
-  }
+    });
 
-  const shouldShowWishlistIcon = alwaysShowWishlistIcon || isWishlisted
+    onAddToCart?.();
+  };
+
+  const shouldShowWishlistIcon = alwaysShowWishlistIcon || isWishlisted;
 
   return (
     <div className="group text-center commonProductCard">
-      {/* IMAGE + LINK */}
-      <div className="commonProductImgWrap relative h-[250px] md:h-[320px] w-full overflow-hidden rounded-2xl mb-4">
-        {/* Product Tag */}
+      {/* IMAGE */}
+      <div className="relative h-[250px] md:h-[320px] w-full overflow-hidden rounded-2xl mb-4">
+        {/* Tag */}
         {tag && (
           <span
-            className={`
-              productTag absolute top-3 left-3 z-[2]
-              text-[11px] px-2 py-1 rounded-full font-medium shadow-sm
-              ${
-                tag.variant === "secondary"
-                  ? "bg-background text-foreground border border-foreground/20"
-                  : "bg-[#fce9ca] text-foreground"
-              }
-            `}
+            className={`absolute top-3 left-3 z-[2] text-[11px] px-2 py-1 rounded-full font-medium ${
+              tag.variant === "secondary"
+                ? "bg-background text-foreground border"
+                : "bg-[#fce9ca] text-foreground"
+            }`}
           >
             {tag.label}
           </span>
         )}
+
         {/* Wishlist */}
         <button
           onClick={handleWishlistToggle}
-          aria-label="Toggle wishlist"
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
           className={`
-            wishlistButton absolute top-3 right-3 z-[2]
-            h-10 w-10 rounded-full flex items-center justify-center
-            shadow-md transition-all duration-300 cursor-pointer
-            ${isWishlisted ? "bg-brand text-background" : "bg-background text-foreground"}
+            absolute top-4 right-4 z-10 h-10 w-10 rounded-full
+            flex items-center justify-center shadow-md transition
+            ${
+              isWishlisted
+                ? "bg-brand text-background"
+                : "bg-background text-foreground hover:bg-brand hover:text-background"
+            }
             ${
               shouldShowWishlistIcon
                 ? "opacity-100 scale-100"
@@ -123,9 +128,10 @@ export default function CommonProductCard({
           <Heart size={18} className={isWishlisted ? "fill-current" : ""} />
         </button>
 
-        <Link href="/product-details" className="block h-full">
+        {/* Product link */}
+        <Link href={`/product-details/${productId}`} className="block h-full">
           <Image
-            src={image || "/placeholder.svg"}
+            src={image || "/img/placeholder.webp"}
             alt={title}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -133,25 +139,24 @@ export default function CommonProductCard({
         </Link>
       </div>
 
-      {/* CONTENT LINK */}
-      <Link href="/product-details" className="commonProductTxtWrap  no-underline hover:no-underline">
+      {/* TEXT */}
+      <Link href={`/product-details/${productId}`}>
         <h4 className="font-times text-lg mb-2">{title}</h4>
-        {/* PRICE */}
-        <div className="mb-4 flex items-center justify-center gap-2">
-          <span className="commonProductPrice text-base font-semibold text-foreground">{price}</span>
 
+        <div className="mb-4 flex justify-center gap-2">
+          <span className="font-semibold">{price}</span>
           {oldPrice && (
-            <span className="commonProductOldPrice text-sm text-foreground/50 line-through">{oldPrice}</span>
+            <span className="text-sm line-through opacity-50">{oldPrice}</span>
           )}
         </div>
       </Link>
 
-      {/* ADD TO CART */}
+      {/* CART */}
       {showAddToCart && (
         <CommonButton onClick={handleAddToCart} disabled={addToCart.isPending}>
           {addToCart.isPending ? "Adding..." : "Add to Cart"}
         </CommonButton>
       )}
     </div>
-  )
+  );
 }

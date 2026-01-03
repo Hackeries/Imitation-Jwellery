@@ -1,27 +1,30 @@
 // services/cart-service.ts
 
+// cart item used in frontend
 export interface CartItem {
   id: string;
   productId: string;
   name: string;
   price: number;
   quantity: number;
-  image:  string;
+  image: string;
 }
 
+// cart shape used in frontend
 export interface Cart {
   items: CartItem[];
-  total:  number;
+  total: number;
 }
 
+// backend cart item shape
 interface BackendCartItem {
   _id: string;
-  productId: 
+  productId:
     | {
         _id: string;
         name: string;
         price: number;
-        thumbnail?:  string;
+        thumbnail?: string;
         images?: string[];
       }
     | string;
@@ -30,6 +33,7 @@ interface BackendCartItem {
   thumbnail?: string;
 }
 
+// backend cart response
 interface BackendCart {
   _id: string;
   deviceId: string;
@@ -37,29 +41,35 @@ interface BackendCart {
   subtotalAmount: number;
   shippingAmount: number;
   discountAmount: number;
-  totalAmount:  number;
+  totalAmount: number;
   currency: string;
   status: string;
 }
 
+// api base url
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
+// get or create device id
 const getDeviceId = (): string => {
   const key = "deviceId";
+
   if (typeof window === "undefined") return "server";
 
   let id = localStorage.getItem(key);
+
   if (!id) {
     id = `device-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     try {
-      localStorage. setItem(key, id);
+      localStorage.setItem(key, id);
     } catch {
-      // localStorage not available
+      // ignore storage error
     }
   }
+
   return id;
 };
 
+// convert backend item to frontend item
 const transformCartItem = (backendItem: BackendCartItem): CartItem => {
   const product =
     typeof backendItem.productId === "object" ? backendItem.productId : null;
@@ -89,18 +99,17 @@ const transformCartItem = (backendItem: BackendCartItem): CartItem => {
   };
 };
 
-
-const calculateTotal = (items:  CartItem[]): number =>
+// calculate cart total
+const calculateTotal = (items: CartItem[]): number =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-/**
- * Fetch cart for current device
- */
+// fetch cart for device
 export const fetchCart = async (): Promise<Cart> => {
   const deviceId = getDeviceId();
 
+  // skip fetch on server
   if (deviceId === "server") {
-    return { items: [], total:  0 };
+    return { items: [], total: 0 };
   }
 
   const url = `${API_BASE_URL}/api/v1/cart/${deviceId}`;
@@ -108,38 +117,35 @@ export const fetchCart = async (): Promise<Cart> => {
   try {
     const response = await fetch(url);
 
-    if (!response. ok) {
+    if (!response.ok) {
       if (response.status === 404) {
-        return { items:  [], total: 0 };
+        return { items: [], total: 0 };
       }
-      throw new Error(`Failed to fetch cart: ${response.status}`);
+      throw new Error("Failed to fetch cart");
     }
 
     const responseData = await response.json();
-    
-    // Backend returns:  { success: true, data:  { cart: {... } }, message: "..." }
-    const backendCart:  BackendCart | null =
-      responseData?. data?.cart || responseData?.data || null;
+
+    const backendCart: BackendCart | null =
+      responseData?.data?.cart || responseData?.data || null;
 
     if (!backendCart || !Array.isArray(backendCart.items)) {
-      return { items: [], total:  0 };
+      return { items: [], total: 0 };
     }
 
-    const items = backendCart. items.map(transformCartItem);
-    return { 
-      items, 
-      total: backendCart.totalAmount || calculateTotal(items) 
+    const items = backendCart.items.map(transformCartItem);
+
+    return {
+      items,
+      total: backendCart.totalAmount || calculateTotal(items),
     };
   } catch (error) {
-    console. error("Error fetching cart:", error);
-    return { items:  [], total: 0 };
+    console.error("Error fetching cart", error);
+    return { items: [], total: 0 };
   }
 };
 
-/**
- * Add item to cart
- * Backend expects: POST /api/v1/cart/items with body { deviceId, productId, qty }
- */
+// add item to cart
 export const addToCart = async (
   productId: string,
   name: string,
@@ -152,28 +158,24 @@ export const addToCart = async (
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type":  "application/json" },
-    body:  JSON.stringify({ 
-      deviceId, 
-      productId, 
-      qty: quantity 
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      deviceId,
+      productId,
+      qty: quantity || 1,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Add to cart failed:", response.status, errorText);
-    throw new Error(`Failed to add to cart: ${response.status}`);
+    throw new Error("Failed to add to cart");
   }
 
-  const responseData = await response. json();
-  
-  // Backend returns:  { success: true, data: { cart:  {...} }, message: "Item added to cart" }
-  const backendCart:  BackendCart | null = 
-    responseData?. data?.cart || responseData?.data || null;
+  const responseData = await response.json();
 
-  if (! backendCart || ! Array.isArray(backendCart.items)) {
-    // Return a fallback with the item we just added
+  const backendCart: BackendCart | null =
+    responseData?.data?.cart || responseData?.data || null;
+
+  if (!backendCart || !Array.isArray(backendCart.items)) {
     return {
       items: [
         {
@@ -181,49 +183,44 @@ export const addToCart = async (
           productId,
           name,
           price,
-          quantity,
+          quantity: quantity || 1,
           image,
         },
       ],
-      total: price * quantity,
+      total: price * (quantity || 1),
     };
   }
 
   const items = backendCart.items.map(transformCartItem);
-  return { 
-    items, 
-    total:  backendCart.totalAmount || calculateTotal(items) 
+
+  return {
+    items,
+    total: backendCart.totalAmount || calculateTotal(items),
   };
 };
 
-/**
- * Remove item from cart
- * Backend expects: DELETE /api/v1/cart/items/: itemId? deviceId=xxx
- */
+// remove item from cart
 export const removeFromCart = async (cartItemId: string): Promise<Cart> => {
   const deviceId = getDeviceId();
-  const url = `${API_BASE_URL}/api/v1/cart/items/${cartItemId}? deviceId=${deviceId}`;
+  const url = `${API_BASE_URL}/api/v1/cart/items/${cartItemId}?deviceId=${deviceId}`;
 
   const response = await fetch(url, { method: "DELETE" });
 
   if (!response.ok) {
-    throw new Error(`Failed to remove from cart: ${response.status}`);
+    throw new Error("Failed to remove from cart");
   }
 
-  // Refetch to get latest server state
   return fetchCart();
 };
 
-/**
- * Update item quantity
- * Backend expects:  PUT /api/v1/cart/items/:itemId with body { deviceId, qty }
- */
+// update cart item quantity
 export const updateCartQuantity = async (
-  cartItemId:  string,
+  cartItemId: string,
   quantity: number
 ): Promise<Cart> => {
   const deviceId = getDeviceId();
 
+  // remove item if quantity is zero
   if (quantity <= 0) {
     return removeFromCart(cartItemId);
   }
@@ -231,34 +228,36 @@ export const updateCartQuantity = async (
   const url = `${API_BASE_URL}/api/v1/cart/items/${cartItemId}`;
 
   const response = await fetch(url, {
-    method:  "PUT",
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON. stringify({ deviceId, qty: quantity }),
+    body: JSON.stringify({
+      deviceId,
+      qty: quantity,
+    }),
   });
 
-  if (!response. ok) {
-    throw new Error(`Failed to update cart item: ${response.status}`);
+  if (!response.ok) {
+    throw new Error("Failed to update cart");
   }
 
   const responseData = await response.json();
-  const backendCart: BackendCart | null = 
+
+  const backendCart: BackendCart | null =
     responseData?.data?.cart || responseData?.data || null;
 
-  if (!backendCart || !Array.isArray(backendCart. items)) {
+  if (!backendCart || !Array.isArray(backendCart.items)) {
     return fetchCart();
   }
 
   const items = backendCart.items.map(transformCartItem);
-  return { 
-    items, 
-    total: backendCart.totalAmount || calculateTotal(items) 
+
+  return {
+    items,
+    total: backendCart.totalAmount || calculateTotal(items),
   };
 };
 
-/**
- * Clear entire cart
- * Backend expects: DELETE /api/v1/cart?deviceId=xxx
- */
+// clear full cart
 export const clearCart = async (): Promise<Cart> => {
   const deviceId = getDeviceId();
   const url = `${API_BASE_URL}/api/v1/cart?deviceId=${deviceId}`;
@@ -266,8 +265,8 @@ export const clearCart = async (): Promise<Cart> => {
   try {
     await fetch(url, { method: "DELETE" });
   } catch {
-    // Ignore errors
+    // ignore clear error
   }
 
-  return { items: [], total:  0 };
+  return { items: [], total: 0 };
 };

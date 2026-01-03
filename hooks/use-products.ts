@@ -6,63 +6,100 @@ import {
   type ProductFilters,
   type ProductListResponse,
 } from "@/services/product-service";
+import { getCategoryIdBySlug } from "@/services/category-service";
 
+/* -----------------------------------------
+   NORMAL PRODUCT LIST
+----------------------------------------- */
 export const useProducts = (filters: ProductFilters = {}) => {
   return useQuery<ProductListResponse, Error>({
     queryKey: ["products", "list", filters],
     queryFn: () => fetchProducts(filters),
     staleTime: 1000 * 60 * 5,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (prev) => prev,
     retry: 2,
   });
 };
 
-// Infinite pagination for "Load More"
+/* -----------------------------------------
+   EXISTING HOME PAGE HOOK (RESTORED)
+----------------------------------------- */
 export const useProductsInfinite = (
   filters: Omit<ProductFilters, "page" | "limit"> = {}
 ) => {
   return useInfiniteQuery<ProductListResponse, Error>({
     queryKey: ["products", "infinite", filters],
+
     queryFn: ({ pageParam }) =>
-      fetchProducts({ ...filters, page: pageParam as number }),
+      fetchProducts({
+        ...filters,
+        page: pageParam as number,
+      }),
+
     initialPageParam: 1,
+
     getNextPageParam: (lastPage) => {
       const current = lastPage?.meta?.currentPage ?? 1;
-      const totalPages = lastPage?.meta?.totalPages ?? 1;
-      const next = current + 1;
-      return next <= totalPages ? next : undefined;
+      const total = lastPage?.meta?.totalPages ?? 1;
+      return current < total ? current + 1 : undefined;
     },
+
     staleTime: 1000 * 60 * 5,
     retry: 2,
   });
 };
 
-// NEW: Hook specifically for category-based product listing
+/* -----------------------------------------
+   INTERNAL HOOK TO RESOLVE CATEGORY ID
+----------------------------------------- */
+const useCategoryId = (slug: string) => {
+  return useQuery<string | null>({
+    queryKey: ["category-id", slug],
+    queryFn: () => getCategoryIdBySlug(slug),
+    enabled: !!slug,
+    staleTime: 1000 * 60 * 10,
+  });
+};
+
+/* -----------------------------------------
+   CATEGORY PAGE HOOK (SAFE + CORRECT)
+----------------------------------------- */
 export const useProductsByCategory = (
   categorySlug: string,
-  additionalFilters: Omit<
-    ProductFilters,
-    "categorySlug" | "page" | "limit"
-  > = {}
+  additionalFilters: Omit<ProductFilters, "categoryId" | "page" | "limit"> = {}
 ) => {
-  const filters = {
-    ...additionalFilters,
-    categorySlug,
-  };
+  const { data: categoryId, isLoading } = useCategoryId(categorySlug);
+
+  // convert null → undefined for TS
+  const resolvedCategoryId: string | undefined = categoryId ?? undefined;
 
   return useInfiniteQuery<ProductListResponse, Error>({
-    queryKey: ["products", "category", categorySlug, additionalFilters],
+    queryKey: [
+      "products",
+      "category",
+      categorySlug,
+      resolvedCategoryId,
+      additionalFilters,
+    ],
+
     queryFn: ({ pageParam }) =>
-      fetchProducts({ ...filters, page: pageParam as number }),
+      fetchProducts({
+        ...additionalFilters,
+        categoryId: resolvedCategoryId,
+        page: pageParam as number,
+      }),
+
     initialPageParam: 1,
+
     getNextPageParam: (lastPage) => {
       const current = lastPage?.meta?.currentPage ?? 1;
-      const totalPages = lastPage?.meta?.totalPages ?? 1;
-      const next = current + 1;
-      return next <= totalPages ? next : undefined;
+      const total = lastPage?.meta?.totalPages ?? 1;
+      return current < total ? current + 1 : undefined;
     },
+
     staleTime: 1000 * 60 * 5,
     retry: 2,
-    enabled: !!categorySlug, // Only fetch when categorySlug is provided
+
+    enabled: !!resolvedCategoryId && !isLoading,
   });
 };

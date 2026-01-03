@@ -1,7 +1,8 @@
-// services/product-service. ts
+// services/product-service.ts
 
 import { getCategoryIdBySlug } from "./category-service";
 
+// product shape used in frontend
 export interface Product {
   id: string;
   title: string;
@@ -19,6 +20,7 @@ export interface Product {
   };
 }
 
+// api response shape
 export interface ProductListResponse {
   data: Product[];
   meta: {
@@ -28,6 +30,7 @@ export interface ProductListResponse {
   };
 }
 
+// filters accepted by api
 export interface ProductFilters {
   search?: string;
   categoryId?: string | string[];
@@ -40,6 +43,7 @@ export interface ProductFilters {
   limit?: number;
 }
 
+// backend product shape
 interface BackendProduct {
   _id: string;
   sku: string;
@@ -59,8 +63,10 @@ interface BackendProduct {
   createdAt?: string;
 }
 
+// api base url
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
+// convert number to rupee format
 const formatPrice = (price: number): string => {
   return `Rs. ${price.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -68,13 +74,16 @@ const formatPrice = (price: number): string => {
   })}`;
 };
 
+// convert backend product to frontend product
 const transformProduct = (backendProduct: BackendProduct): Product => {
   const priceNumber = Number(backendProduct.price) || 0;
+
   const createdAtMs = backendProduct.createdAt
     ? new Date(backendProduct.createdAt).getTime()
     : 0;
 
   let imageUrl = "/img/placeholder.webp";
+
   if (backendProduct.thumbnail) {
     imageUrl = backendProduct.thumbnail;
   } else if (backendProduct.images && backendProduct.images.length > 0) {
@@ -93,10 +102,12 @@ const transformProduct = (backendProduct: BackendProduct): Product => {
     stockQty: Number(backendProduct.stockQty) || 0,
   };
 
+  // show old price if mrp is higher
   if (backendProduct.mrp && backendProduct.mrp > priceNumber) {
     product.oldPrice = formatPrice(backendProduct.mrp);
   }
 
+  // set badge tag
   if (backendProduct.isNewArrival) {
     product.tag = { label: "New Arrival", variant: "primary" };
   } else if (backendProduct.isBestSeller) {
@@ -106,6 +117,7 @@ const transformProduct = (backendProduct: BackendProduct): Product => {
   return product;
 };
 
+// fetch products list
 export const fetchProducts = async (
   filters: ProductFilters = {}
 ): Promise<ProductListResponse> => {
@@ -113,8 +125,10 @@ export const fetchProducts = async (
 
   let resolvedCategoryId = filters.categoryId;
 
+  // resolve category id from slug
   if (filters.categorySlug && !filters.categoryId) {
     const categoryId = await getCategoryIdBySlug(filters.categorySlug);
+
     if (categoryId) {
       resolvedCategoryId = categoryId;
     } else {
@@ -129,6 +143,7 @@ export const fetchProducts = async (
     }
   }
 
+  // apply filters
   if (filters.search) {
     params.append("search", String(filters.search));
   }
@@ -137,6 +152,7 @@ export const fetchProducts = async (
     const ids = Array.isArray(resolvedCategoryId)
       ? resolvedCategoryId.join(",")
       : String(resolvedCategoryId);
+
     params.append("categoryId", ids);
   }
 
@@ -165,6 +181,7 @@ export const fetchProducts = async (
   }
 
   const queryString = params.toString();
+
   const url = queryString
     ? `${API_BASE_URL}/api/v1/products?${queryString}`
     : `${API_BASE_URL}/api/v1/products`;
@@ -172,9 +189,7 @@ export const fetchProducts = async (
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch products: ${response.status} ${response.statusText}`
-    );
+    throw new Error("Failed to fetch products");
   }
 
   const responseData = await response.json();
@@ -186,6 +201,7 @@ export const fetchProducts = async (
     total: 0,
   };
 
+  // handle different api response shapes
   if (
     responseData.data &&
     responseData.data.items &&
@@ -205,8 +221,11 @@ export const fetchProducts = async (
   const products = backendProducts.map(transformProduct);
 
   const totalItems = pagination.total || products.length;
+
   const limitValue = pagination.limit || 20;
+
   const totalPages = Math.ceil(totalItems / limitValue);
+
   const currentPage = pagination.page || 1;
 
   return {
