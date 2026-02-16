@@ -5,7 +5,7 @@ import { Dialog, Transition } from "@headlessui/react";
 import { X, CheckCircle } from "lucide-react";
 import CommonButton from "@/app/components/button/CommonButton";
 import CommonInput from "@/app/components/input/CommonInput";
-import { useSubscribe } from "@/hooks/use-subscription";
+import { subscribeNewsletter } from "@/services/subscription-service";
 import { toast } from "sonner";
 
 type SubscribePopupProps = {
@@ -15,44 +15,56 @@ type SubscribePopupProps = {
 
 export default function SubscribePopup({ open, onClose }: SubscribePopupProps) {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [couponCode, setCouponCode] = useState<string | null>(null);
-
-  const subscribeMutation = useSubscribe();
 
   const handleSubscribe = async () => {
     if (!email.trim()) {
       toast.error("Please enter your email");
       return;
     }
-
-    if (!email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       toast.error("Please enter a valid email");
       return;
     }
 
+    setLoading(true);
     try {
-      const result = await subscribeMutation.mutateAsync({ email });
+      const result = await subscribeNewsletter({ email });
+
       setIsSuccess(true);
       setCouponCode(result.couponCode || null);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("isSubscribed", "true");
+        localStorage.setItem("hasSeenSubscribePopup", "true");
+      }
+
       toast.success(result.message);
+
+      setTimeout(() => {
+        onClose();
+      }, 4000);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to subscribe"
+        error instanceof Error ? error.message : "Failed to subscribe",
       );
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleClose = () => {
+  const handleAfterLeave = () => {
     setEmail("");
     setIsSuccess(false);
     setCouponCode(null);
-    onClose();
   };
 
   return (
-    <Transition appear show={open} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
+    <Transition appear show={open} as={Fragment} afterLeave={handleAfterLeave}>
+      <Dialog as="div" className="relative z-[100]" onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -66,90 +78,101 @@ export default function SubscribePopup({ open, onClose }: SubscribePopupProps) {
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-hidden">
-          <div className="flex h-full items-end sm:items-center justify-center">
+          <div className="flex h-full items-center justify-center p-4">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
-              enterFrom="opacity-0 translate-y-full sm:translate-y-6 sm:scale-95"
-              enterTo="opacity-100 translate-y-0 sm:translate-y-0 sm:scale-100"
+              enterFrom="opacity-0 scale-95 translate-y-4"
+              enterTo="opacity-100 scale-100 translate-y-0"
               leave="ease-in duration-200"
-              leaveFrom="opacity-100 translate-y-0 sm:translate-y-0 sm:scale-100"
-              leaveTo="opacity-0 translate-y-full sm:translate-y-6 sm:scale-95"
+              leaveFrom="opacity-100 scale-100 translate-y-0"
+              leaveTo="opacity-0 scale-95 translate-y-4"
             >
-              <Dialog.Panel className="w-full sm:max-w-md bg-background rounded-t-2xl sm:rounded-2xl p-6 relative">
+              <Dialog.Panel className="w-full max-w-md bg-[#fffaf2] rounded-2xl p-6 relative shadow-2xl border-4 border-white">
                 <button
-                  onClick={handleClose}
-                  className="absolute right-4 top-4 p-2 rounded-full hover:bg-foreground/10"
+                  onClick={onClose}
+                  className="absolute right-4 top-4 p-2 rounded-full hover:bg-black/5 transition-colors z-10"
+                  aria-label="Close popup"
                 >
-                  <X size={18} />
+                  <X size={20} className="text-foreground/60" />
                 </button>
 
-                <div className="sm:hidden w-12 h-1 bg-foreground/20 rounded-full mx-auto mb-4" />
-
-                <div className="mb-4">
-                  <p className="font-times text-3xl">Privora</p>
-                </div>
-
                 {isSuccess ? (
-                  <div className="text-center py-4">
-                    <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                    <Dialog.Title className="text-lg font-medium mb-2">
-                      You&apos;re Subscribed!
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
+                      <CheckCircle size={32} />
+                    </div>
+                    <Dialog.Title className="text-2xl font-serif font-bold mb-2 text-brand">
+                      You&apos;re on the list!
                     </Dialog.Title>
-                    <p className="text-sm text-foreground/70 mb-4">
-                      Thank you for subscribing to our newsletter.
+                    <p className="text-foreground/70 mb-6 text-sm">
+                      Thank you for subscribing. Keep an eye on your inbox.
                     </p>
                     {couponCode && (
-                      <div className="bg-brand/10 border border-brand rounded-lg p-4 mb-4">
-                        <p className="text-sm text-foreground/70 mb-1">
-                          Your discount code:
+                      <div className="bg-white border-2 border-brand/20 border-dashed p-4 rounded-xl mt-4">
+                        <p className="text-xs text-brand uppercase font-bold mb-2 tracking-widest">
+                          Use Code at Checkout:
                         </p>
-                        <p className="text-2xl font-bold text-brand">
+                        <div className="bg-brand/5 py-2 px-4 rounded text-2xl font-mono font-bold text-brand tracking-wider">
                           {couponCode}
+                        </div>
+                        <p className="text-[10px] text-foreground/50 mt-2">
+                          *Valid for orders above ₹300
                         </p>
                       </div>
                     )}
-                    <CommonButton onClick={handleClose}>
-                      Start Shopping
-                    </CommonButton>
                   </div>
                 ) : (
-                  <>
-                    <Dialog.Title className="text-lg font-medium mb-1">
-                      Subscribe & Enjoy
-                    </Dialog.Title>
+                  <div className="py-2">
+                    <div className="mb-6 text-center">
+                      <p className="font-serif text-3xl text-brand mb-1">
+                        Privora
+                      </p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/40">
+                        Jewelry
+                      </p>
+                    </div>
 
-                    <p className="text-3xl font-bold text-brand mb-2">
-                      Get 10% OFF
-                    </p>
+                    <div className="text-center mb-6">
+                      <Dialog.Title className="text-xl font-medium mb-1">
+                        Join Our Newsletter
+                      </Dialog.Title>
 
-                    <p className="text-sm text-foreground/70 mb-6">
-                      Join us & get 10% off on your purchase over ₹300.
-                      <br />
-                      <span className="text-xs">(Discount up to ₹500)</span>
-                    </p>
+                      <p className="text-4xl font-bold text-brand my-3">
+                        Get 10% OFF
+                      </p>
+
+                      <p className="text-sm text-foreground/70 leading-relaxed max-w-[80%] mx-auto">
+                        Sign up to get the latest on sales, new releases and
+                        more.
+                      </p>
+                    </div>
 
                     <div className="space-y-4">
                       <CommonInput
-                        placeholder="Enter your email"
+                        placeholder="Enter your email address"
                         name="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         noMargin
+                        className="bg-white h-12"
+                        disabled={loading}
                       />
 
                       <CommonButton
-                        className="w-full mt-4"
+                        className="w-full h-12 uppercase tracking-widest text-sm font-semibold"
                         onClick={handleSubscribe}
-                        disabled={subscribeMutation.isPending}
+                        disabled={loading}
                       >
-                        {subscribeMutation.isPending
-                          ? "Subscribing..."
-                          : "Subscribe Now"}
+                        {loading ? "Joining..." : "Subscribe Now"}
                       </CommonButton>
+
+                      <p className="text-[10px] text-center text-foreground/40 mt-3">
+                        By subscribing you agree to our Terms & Conditions.
+                      </p>
                     </div>
-                  </>
+                  </div>
                 )}
               </Dialog.Panel>
             </Transition.Child>

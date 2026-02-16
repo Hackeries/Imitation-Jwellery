@@ -1,39 +1,75 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { X, Pencil } from "lucide-react";
+import { X, Edit2, Loader2 } from "lucide-react";
 import CommonButton from "@/app/components/button/CommonButton";
 import CommonInput from "@/app/components/input/CommonInput";
 import OTPInput from "react-otp-input";
 import { useRequestOtp, useVerifyOtp, useUserProfile } from "@/hooks/use-auth";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   redirectTo?: string;
+  onSuccess?: () => void;
+  forceLoginForm?: boolean;
 };
+
+type requestWithOtp = { success: boolean; message: string; otp?: string }
 
 export default function LoginToContinueModal({
   open,
   onClose,
-  redirectTo = "/checkout",
+  redirectTo,
+  onSuccess,
+  forceLoginForm = false,
 }: Props) {
   const [step, setStep] = useState<"mobile" | "otp">("mobile");
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
   const router = useRouter();
+  const pathname = usePathname();
   const { data: user } = useUserProfile();
   const requestOtpMutation = useRequestOtp();
   const verifyOtpMutation = useVerifyOtp();
 
-  const isLoggedIn = !!user && !!user._id && user._id !== "guest";
+  const isLoggedIn = !forceLoginForm && !!user && !!user._id && user._id !== "guest";
 
-  const handleRequestOtp = async () => {
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const handleSmartRedirect = () => {
+    if (onSuccess) {
+      onSuccess();
+      return;
+    }
+
+    if (redirectTo) {
+      router.push(redirectTo);
+      return;
+    }
+
+    if (pathname.includes("/sign-in") || pathname.includes("/login")) {
+      router.push("/");
+      return;
+    }
+
+    router.refresh();
+  };
+
+  const handleRequestOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!mobile || mobile.length < 10) {
       toast.error("Please enter a valid mobile number");
       return;
@@ -41,12 +77,36 @@ export default function LoginToContinueModal({
 
     setIsLoading(true);
     try {
-      await requestOtpMutation.mutateAsync(mobile);
+      const result: requestWithOtp = await requestOtpMutation.mutateAsync(mobile);
       setStep("otp");
-      toast.success("OTP sent to your mobile number");
+      setResendTimer(20);
+      if (result.otp) {
+        toast.success(`OTP sent! (Dev: ${result.otp})`);
+      } else {
+        toast.success("OTP sent successfully");
+      }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to send OTP"
+        error instanceof Error ? error.message : "Failed to send OTP",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setIsLoading(true);
+    try {
+      const result: requestWithOtp = await requestOtpMutation.mutateAsync(mobile);
+      setResendTimer(20);
+      if (result.otp) {
+        toast.success(`OTP resent! (Dev: ${result.otp})`);
+      } else {
+        toast.success("OTP resent successfully");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to resend OTP",
       );
     } finally {
       setIsLoading(false);
@@ -62,13 +122,17 @@ export default function LoginToContinueModal({
     setIsLoading(true);
     try {
       await verifyOtpMutation.mutateAsync({ mobile, otp });
-      toast.success("Login successful!");
+
+      toast.success("Welcome back!", {
+        description: "You have successfully logged in.",
+      });
+
       onClose();
-      router.push(redirectTo);
+      handleSmartRedirect();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "OTP verification failed"
-      );
+      toast.error("Login failed", {
+        description: error instanceof Error ? error.message : "Invalid OTP",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -77,37 +141,20 @@ export default function LoginToContinueModal({
   const handleEditNumber = () => {
     setStep("mobile");
     setOtp("");
-  };
-
-  const handleResendOtp = async () => {
-    setIsLoading(true);
-    try {
-      await requestOtpMutation.mutateAsync(mobile);
-      toast.success("OTP resent successfully");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to resend OTP"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleContinueAsLoggedIn = () => {
-    onClose();
-    router.push(redirectTo);
+    setResendTimer(0);
   };
 
   const resetAndClose = () => {
     setStep("mobile");
     setMobile("");
     setOtp("");
+    setResendTimer(0);
     onClose();
   };
 
   return (
     <Transition appear show={open} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={resetAndClose}>
+      <Dialog as="div" className="relative z-[60]" onClose={resetAndClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -117,117 +164,127 @@ export default function LoginToContinueModal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40" />
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
         </Transition.Child>
 
-        <div className="fixed inset-0 flex items-end md:items-center justify-center">
+        <div className="fixed inset-0 flex items-center justify-center p-4">
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
-            enterFrom="translate-y-full md:scale-95 md:opacity-0"
-            enterTo="translate-y-0 md:scale-100 md:opacity-100"
+            enterFrom="opacity-0 scale-95 translate-y-4"
+            enterTo="opacity-100 scale-100 translate-y-0"
             leave="ease-in duration-200"
-            leaveFrom="translate-y-0 md:scale-100 md:opacity-100"
-            leaveTo="translate-y-full md:scale-95 md:opacity-0"
+            leaveFrom="opacity-100 scale-100 translate-y-0"
+            leaveTo="opacity-0 scale-95 translate-y-4"
           >
-            <Dialog.Panel className="w-full md:max-w-md bg-[#fffaf2] rounded-t-3xl md:rounded-2xl p-6 md:p-8">
-              <div className="flex items-center justify-between mb-6">
-                <Dialog.Title className="text-lg font-medium">
-                  {isLoggedIn
-                    ? "Continue to Checkout"
-                    : step === "mobile"
-                      ? "Login to Checkout"
-                      : "Verify OTP"}
-                </Dialog.Title>
+            <Dialog.Panel className="w-full max-w-[400px] bg-background rounded-xl shadow-2xl overflow-hidden relative mx-2">
+              <button
+                onClick={resetAndClose}
+                className="absolute right-3 top-3 sm:right-4 sm:top-4 p-1 rounded-full hover:bg-foreground/10 transition-colors z-10"
+                aria-label="Close modal"
+              >
+                <X size={20} className="text-foreground/50" />
+              </button>
 
-                <button
-                  onClick={resetAndClose}
-                  className="p-2 rounded-full hover:bg-foreground/10"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {isLoggedIn ? (
-                <>
-                  <p className="text-sm text-foreground/70 mb-6">
-                    You&apos;re logged in as{" "}
-                    <strong>{user.fullName || user.mobile}</strong>
-                  </p>
-                  <CommonButton onClick={handleContinueAsLoggedIn}>
-                    Continue to Checkout
-                  </CommonButton>
-                </>
-              ) : step === "mobile" ? (
-                <>
-                  <p className="text-sm text-foreground/70 mb-6">
-                    Enter your mobile number to continue checkout
-                  </p>
-
-                  <CommonInput
-                    label="Mobile Number"
-                    name="mobile"
-                    placeholder="Enter your mobile number"
-                    type="tel"
-                    value={mobile}
-                    onChange={(e) =>
-                      setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
-                    }
-                    maxLength={10}
-                  />
-
-                  <CommonButton
-                    className="mt-6"
-                    onClick={handleRequestOtp}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Sending..." : "Continue"}
-                  </CommonButton>
-                </>
-              ) : (
-                <div>
-                  <p className="text-sm text-center text-foreground/70 mb-6">
-                    Enter the OTP sent to your mobile number
-                  </p>
-
-                  <div className="flex items-center justify-center gap-2 mb-6">
-                    <span className="text-sm font-medium">+91 {mobile}</span>
-                    <button
-                      onClick={handleEditNumber}
-                      className="p-2 rounded-full border border-foreground/20"
+              <div className="p-5 sm:p-8 flex flex-col items-center justify-center gap-6 sm:gap-8">
+                {isLoggedIn ? (
+                  <div className="text-center w-full">
+                    <h1 className="font-times text-3xl text-center mb-6">Privora</h1>
+                    <h3 className="text-lg font-medium mb-2">Continue as</h3>
+                    <p className="text-brand font-medium text-lg mb-6">
+                      {user?.fullName || user?.mobile}
+                    </p>
+                    <CommonButton
+                      variant="primaryBtn"
+                      onClick={() => {
+                        onClose();
+                        handleSmartRedirect();
+                      }}
+                      className="w-full"
                     >
-                      <Pencil size={14} />
-                    </button>
+                      Continue
+                    </CommonButton>
                   </div>
+                ) : (
+                  <>
+                    <h1 className="font-times text-3xl text-center">Privora</h1>
 
-                  <div className="flex justify-center gap-3 mb-4 otpInputWrap">
-                    <OTPInput
-                      value={otp}
-                      onChange={setOtp}
-                      numInputs={4}
-                      renderSeparator={<span> </span>}
-                      renderInput={(props) => (
-                        <input
-                          {...props}
-                          className="w-12 h-12 border border-gray-300 rounded text-center"
-                        />
+                    <div className="flex flex-col gap-1 w-full text-center">
+                      <h6 className="w-full text-lg text-foreground font-medium">
+                        {step === "otp" ? "Verify OTP" : "Welcome Back"}
+                      </h6>
+                      <p className="text-sm text-foreground/70">
+                        {step === "otp"
+                          ? "Enter the OTP sent to your mobile number"
+                          : "Sign in to view your orders, wishlist, and exclusive offers."}
+                      </p>
+                    </div>
+
+                    <div className="w-full">
+                      {step === "mobile" ? (
+                        <form onSubmit={handleRequestOtp}>
+                          <CommonInput
+                            label="Mobile Number"
+                            name="mobile"
+                            type="tel"
+                            placeholder="Enter your mobile number"
+                            value={mobile}
+                            onChange={(e) =>
+                              setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                            }
+                          />
+                        </form>
+                      ) : (
+                        <div className="otpInputWrap flex flex-col items-center">
+                          <div className="flex items-center justify-center gap-2 mb-4 text-sm bg-foreground/5 py-2 px-4 rounded-full">
+                            <span className="font-medium">+91 {mobile}</span>
+                            <button
+                              type="button"
+                              onClick={handleEditNumber}
+                              className="text-brand hover:opacity-80"
+                              aria-label="Edit mobile number"
+                              title="Edit mobile number"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          </div>
+
+                          <OTPInput
+                            value={otp}
+                            onChange={setOtp}
+                            numInputs={4}
+                            renderSeparator={<span className="mx-1"> </span>}
+                            renderInput={(props) => (
+                              <input
+                                {...props}
+                                className="w-12 h-12 border border-gray-300 rounded-lg text-center text-lg focus:border-brand outline-none transition-all"
+                              />
+                            )}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={handleResendOtp}
+                            disabled={isLoading || resendTimer > 0}
+                            className="mt-6 text-sm font-medium text-brand hover:underline disabled:opacity-50"
+                          >
+                            {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Resend OTP"}
+                          </button>
+                        </div>
                       )}
-                    />
-                  </div>
+                    </div>
 
-                  <button
-                    onClick={handleResendOtp}
-                    disabled={isLoading}
-                    className="block mx-auto text-sm underline mb-6 disabled:opacity-50"
-                  >
-                    Resend OTP
-                  </button>
-
-                  <CommonButton onClick={handleVerifyOtp} disabled={isLoading}>
-                    {isLoading ? "Verifying..." : "Verify OTP"}
-                  </CommonButton>
-                </div>
-              )}
+                    <CommonButton
+                      variant="primaryBtn"
+                      className="w-full"
+                      onClick={step === "otp" ? handleVerifyOtp : handleRequestOtp}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? "Please wait..." : step === "otp" ? "Verify OTP" : "Continue"}
+                    </CommonButton>
+                  </>
+                )}
+              </div>
             </Dialog.Panel>
           </Transition.Child>
         </div>

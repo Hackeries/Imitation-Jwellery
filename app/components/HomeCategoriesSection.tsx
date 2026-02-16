@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
+import { getImageUrl } from "@/lib/image-utils";
 
 import CommonButton from "./button/CommonButton";
 import CommonHeading from "./CommonHeading";
@@ -28,15 +30,14 @@ export default function HomeCategoriesSection() {
   });
 
   // only active product categories
-  const visibleCategories =
-    categories?.filter((cat) => cat.type === "category") ?? [];
+  const visibleCategories = useMemo(() => categories?.filter(cat => cat.type === "category") ?? [], [categories]);
 
   return (
     <section className="px-3 md:px-8 lg:px-10 py-7 md:py-12 lg:py-20">
       <CommonHeading
         level={1}
         title="Welcome to Privora"
-        description="Welcome to White Bunny, where elegance meets simplicity. We are a contemporary jewelry brand crafted for the modern Indian woman who values minimalism, affordability, and self-expression."
+        description="Welcome to Privora. Here you'll find beautiful, minimalist designs that complement every occasion & style, from casual looks to traditional Indian wear. We are glad you're here."
       />
 
       <div className="max-w-[1560px] mx-auto commonSliderWrap">
@@ -58,22 +59,23 @@ export default function HomeCategoriesSection() {
               640: { slidesPerView: 2, spaceBetween: 16 },
               768: { slidesPerView: 3, spaceBetween: 20 },
               1024: { slidesPerView: 5, spaceBetween: 24 },
-            }}
-          >
-            {visibleCategories.map((category) => (
+            }}>
+            {visibleCategories.map(category => (
               <SwiperSlide key={category.id}>
                 <Link href={`/${category.slug}`}>
                   <div className="productCategoryItem h-52 md:h-80 relative overflow-hidden rounded-2xl flex items-end justify-center p-6 cursor-pointer">
-                    <img
-                      src={category.thumbnail}
-                      alt={category.title}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
+                    {category.thumbnail && (
+                      <Image
+                        src={getImageUrl(category.thumbnail)}
+                        alt={category.title}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                        loading="lazy"
+                      />
+                    )}
 
-                    <CommonButton
-                      variant="secondaryBtn"
-                      className="relative z-10"
-                    >
+                    <CommonButton variant="secondaryBtn" className="relative z-10">
                       {category.title}
                     </CommonButton>
                   </div>

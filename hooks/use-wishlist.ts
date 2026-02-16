@@ -6,28 +6,32 @@ import {
   addWishlistItem,
   removeWishlistItem,
   clearWishlist,
+  isProductInWishlist,
+  syncWishlistOnLogin,
   type Wishlist,
   type ProductLike,
 } from "@/services/wishlist-service";
+import { useUserProfile, isAuthenticated } from "./use-auth";
+import { useEffect } from "react";
 
-// base wishlist query
 export const useWishlist = () => {
   return useQuery<Wishlist>({
     queryKey: ["wishlist"],
     queryFn: getWishlist,
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 30,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24,
     retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    throwOnError: false,
   });
 };
 
-// realtime wishlist count
 export const useWishlistCount = () => {
   const { data } = useWishlist();
   return data?.items.length ?? 0;
 };
 
-// realtime wishlisted check
 export const useIsWishlisted = (productId: string) => {
   const { data } = useWishlist();
 
@@ -38,7 +42,24 @@ export const useIsWishlisted = (productId: string) => {
   return { isWishlisted };
 };
 
-// add to wishlist
+export const useIsWishlistedSync = (productId: string): boolean => {
+  return isProductInWishlist(productId);
+};
+
+export const useSyncWishlistOnLogin = () => {
+  const { data: user } = useUserProfile();
+  const queryClient = useQueryClient();
+  const loggedIn = isAuthenticated(user);
+
+  useEffect(() => {
+    if (loggedIn) {
+      syncWishlistOnLogin().then((wishlist) => {
+        queryClient.setQueryData(["wishlist"], wishlist);
+      });
+    }
+  }, [loggedIn, queryClient]);
+};
+
 export const useAddToWishlist = () => {
   const queryClient = useQueryClient();
 
@@ -47,7 +68,6 @@ export const useAddToWishlist = () => {
 
     onMutate: async (product) => {
       await queryClient.cancelQueries({ queryKey: ["wishlist"] });
-
       const previous = queryClient.getQueryData<Wishlist>(["wishlist"]) ?? {
         items: [],
       };
@@ -57,17 +77,16 @@ export const useAddToWishlist = () => {
           (i) => String(i.productId) === String(product.productId)
         )
       ) {
+        const newItem = {
+          id: product.productId,
+          productId: product.productId,
+          title: product.title,
+          price: product.price,
+          image: product.image,
+        };
+
         queryClient.setQueryData<Wishlist>(["wishlist"], {
-          items: [
-            ...previous.items,
-            {
-              id: product.productId,
-              productId: product.productId,
-              title: product.title,
-              price: product.price,
-              image: product.image,
-            },
-          ],
+          items: [...previous.items, newItem],
         });
       }
 
@@ -83,17 +102,17 @@ export const useAddToWishlist = () => {
     onSuccess: (data) => {
       queryClient.setQueryData(["wishlist"], data);
     },
+
   });
 };
 
-// remove from wishlist
 export const useRemoveFromWishlist = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: removeWishlistItem,
 
-    onMutate: async (id) => {
+    onMutate: async (productId) => {
       await queryClient.cancelQueries({ queryKey: ["wishlist"] });
 
       const previous = queryClient.getQueryData<Wishlist>(["wishlist"]) ?? {
@@ -102,15 +121,14 @@ export const useRemoveFromWishlist = () => {
 
       queryClient.setQueryData<Wishlist>(["wishlist"], {
         items: previous.items.filter(
-          (i) =>
-            String(i.productId) !== String(id) && String(i.id) !== String(id)
+          (i) => String(i.productId) !== String(productId)
         ),
       });
 
       return { previous };
     },
 
-    onError: (_e, _id, ctx) => {
+    onError: (_e, _productId, ctx) => {
       if (ctx?.previous) {
         queryClient.setQueryData(["wishlist"], ctx.previous);
       }
@@ -119,10 +137,10 @@ export const useRemoveFromWishlist = () => {
     onSuccess: (data) => {
       queryClient.setQueryData(["wishlist"], data);
     },
+
   });
 };
 
-// clear wishlist
 export const useClearWishlist = () => {
   const queryClient = useQueryClient();
 
@@ -131,11 +149,8 @@ export const useClearWishlist = () => {
 
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["wishlist"] });
-
       const previous = queryClient.getQueryData<Wishlist>(["wishlist"]);
-
       queryClient.setQueryData<Wishlist>(["wishlist"], { items: [] });
-
       return { previous };
     },
 
@@ -149,6 +164,29 @@ export const useClearWishlist = () => {
       queryClient.setQueryData(["wishlist"], data);
     },
   });
+};
+
+export const useToggleWishlist = () => {
+  const { data: wishlist } = useWishlist();
+  const addMutation = useAddToWishlist();
+  const removeMutation = useRemoveFromWishlist();
+
+  const toggle = (product: ProductLike) => {
+    const isInWishlist = wishlist?.items.some(
+      (i) => String(i.productId) === String(product.productId)
+    );
+
+    if (isInWishlist) {
+      removeMutation.mutate(product.productId);
+    } else {
+      addMutation.mutate(product);
+    }
+  };
+
+  return {
+    toggle,
+    isLoading: addMutation.isPending || removeMutation.isPending,
+  };
 };
 
 export type { Wishlist, ProductLike };

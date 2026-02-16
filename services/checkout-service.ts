@@ -1,115 +1,119 @@
+import { getCommonHeaders } from "@/lib/api-utils";
 import { getDeviceId } from "@/lib/device-storage";
 
 export interface CheckoutPayload {
-  shippingAddressId: string;
+  cartId: string;
+  addressId: string;
   billingAddressId?: string;
   couponCode?: string;
-  paymentMethod?: string;
+  email?: string;
+  fullName?: string;
+  mobile?: string;
   notes?: string;
 }
 
 export interface OrderCreatedResponse {
+  success: boolean;
   orderId: string;
   orderNumber: string;
   totalAmount: number;
-  paymentUrl?: string;
+  paymentSessionId?: string;
+  redirectUrl?: string;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
-};
-
 export const createOrderFromCart = async (
-  payload: CheckoutPayload
+  payload: CheckoutPayload,
 ): Promise<OrderCreatedResponse> => {
-  const deviceId = getDeviceId();
   const url = `${API_BASE_URL}/api/v1/orders`;
+  const deviceId = getDeviceId();
+
+  const { ...payloadToSend } = payload;
 
   const response = await fetch(url, {
     method: "POST",
-    headers: buildHeaders(),
+    headers: {
+      ...getCommonHeaders(),
+      "X-Device-Id": deviceId || "",
+    },
     credentials: "include",
-    body: JSON.stringify({
-      deviceId,
-      ...payload,
-    }),
+    body: JSON.stringify(payloadToSend),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const json = await response.json();
 
   if (!response.ok) {
-    throw new Error(data?.message || "Failed to create order");
+    throw new Error(json.message || "Failed to create order");
   }
 
-  const order = data?.data?.order ?? data?.order ?? data?.data;
+  const resultData = json.data || {};
+  const orderData = resultData.order || {};
 
   return {
-    orderId: order?._id || order?.orderId || "",
-    orderNumber: order?.orderNumber || "",
-    totalAmount: order?.totalAmount || 0,
-    paymentUrl: order?.paymentUrl || data?.data?.paymentUrl,
+    success: true,
+    orderId: orderData._id || resultData.orderId || "",
+    orderNumber: orderData.orderNumber || "",
+    totalAmount: orderData.totalAmount || 0,
+    paymentSessionId: resultData.paymentSessionId || "",
+    redirectUrl: resultData.redirectUrl || "",
   };
 };
 
 export const applyCoupon = async (
-  couponCode: string
-): Promise<{ discount: number; message: string }> => {
-  const deviceId = getDeviceId();
+  couponCode: string,
+  cartId: string,
+): Promise<{ success: boolean; message: string; discountAmount: number }> => {
   const url = `${API_BASE_URL}/api/v1/coupons/apply`;
+  const deviceId = getDeviceId();
 
   const response = await fetch(url, {
     method: "POST",
-    headers: buildHeaders(),
+    headers: {
+      ...getCommonHeaders(),
+      "X-Device-Id": deviceId || "",
+    },
     credentials: "include",
-    body: JSON.stringify({ couponCode, deviceId }),
+    body: JSON.stringify({ cartId, code: couponCode }),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json();
 
   if (!response.ok) {
     throw new Error(data?.message || "Invalid coupon code");
   }
 
   return {
-    discount: data?.data?.discount ?? data?.discount ?? 0,
-    message: data?.message || "Coupon applied successfully",
+    success: true,
+    message: data?.data?.message || "Coupon Applied Successfully",
+    discountAmount: data?.data?.totalDiscount || 0,
   };
 };
 
-export const validateCoupon = async (
-  couponCode: string
-): Promise<{ valid: boolean; discount: number; message: string }> => {
-  const url = `${API_BASE_URL}/api/v1/coupons/validate`;
+export const removeCoupon = async (
+  cartId: string,
+): Promise<{ success: boolean; message: string }> => {
+  const url = `${API_BASE_URL}/api/v1/coupons/applied/${cartId}`;
+  const deviceId = getDeviceId();
 
   const response = await fetch(url, {
-    method: "POST",
-    headers: buildHeaders(),
+    method: "DELETE",
+    headers: {
+      ...getCommonHeaders(),
+      "X-Device-Id": deviceId || "",
+    },
     credentials: "include",
-    body: JSON.stringify({ couponCode }),
+    body: JSON.stringify({ cartId }),
   });
 
-  const data = await response.json().catch(() => ({}));
+  const data = await response.json();
 
   if (!response.ok) {
-    return {
-      valid: false,
-      discount: 0,
-      message: data?.message || "Invalid coupon code",
-    };
+    throw new Error(data?.message || "Failed to remove coupon");
   }
 
   return {
-    valid: true,
-    discount: data?.data?.discount ?? data?.discount ?? 0,
-    message: data?.message || "Coupon is valid",
+    success: true,
+    message: data?.message || "Coupon removed",
   };
 };

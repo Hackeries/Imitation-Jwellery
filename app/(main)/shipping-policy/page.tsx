@@ -1,56 +1,53 @@
+import AnimatedSection from "@/app/components/AnimatedSection";
 import CommonHeading from "@/app/components/CommonHeading";
 
 export default function ShippingPolicyPage() {
   return (
     <div className="cmsPage gradientBg">
-      <section>
-        <div className="px-3 md:px-8 lg:px-10 py-8 md:py-20 lg:py-20">
-          <div className="max-w-3xl md:max-w-4xl mx-auto">
-            <CommonHeading
-              level={1}
-              title="Privora Shipping Policy"
-              noMargin
-            />
-
-            <p className="mt-5 md:mt-6 text-center text-[14px] md:text-base text-foreground/80 leading-relaxed">
-              This Shipping Policy outlines how and when your Privora orders are
-              processed and delivered.
-            </p>
-
-            <div className="mt-14 md:mt-20 space-y-12 md:space-y-16">
-              <Section
-                title="Order Processing"
-                text="Orders are typically processed within 24–48 hours after confirmation, excluding weekends and public holidays."
+      <AnimatedSection>
+        <section>
+          <div className="px-3 md:px-8 lg:px-10 py-8 md:py-20 lg:py-20">
+            <div className="max-w-3xl md:max-w-4xl mx-auto">
+              <CommonHeading
+                level={1}
+                title="Shipping Policy"
+                noMargin
               />
 
-              <Section
-                title="Shipping Timeframes"
-                text="Delivery timelines may vary based on your location. Most orders are delivered within 3–7 business days."
-              />
+              <p className="mt-5 md:mt-6 text-center text-[14px] md:text-base text-foreground/80 leading-relaxed">
+                At Privora, we are committed to offering a smooth and trustworthy shopping experience. This policy outlines how your orders are processed and delivered.
+              </p>
 
-              <Section
-                title="Shipping Charges"
-                text="Shipping charges, if applicable, will be displayed at checkout before order confirmation."
-              />
+              <div className="mt-14 md:mt-20 space-y-12 md:space-y-16">
+                <Section
+                  title="Order Processing"
+                  text="We aim to process and ship orders within a reasonable timeframe after confirmation. Estimated delivery timelines may vary based on location, courier partners, weather conditions, or other operational factors."
+                />
 
-              <Section
-                title="Delayed or Lost Shipments"
-                text="While we strive for timely delivery, delays may occur due to courier or external factors. Privora is not liable for such delays."
-              />
+                <Section
+                  title="Shipping & Delivery"
+                  text="While we work closely with reliable logistics partners, delivery delays caused by external circumstances may occasionally occur. Once an order has been shipped, tracking details will be shared where available. Privora is not responsible for delays, losses, or issues caused by courier partners after dispatch, though we will always try our best to assist you in coordinating and resolving concerns."
+                />
 
-              <Section
-                title="Incorrect Address"
-                text="Please ensure your shipping address is accurate. Privora is not responsible for orders delivered to incorrect addresses provided by customers."
-              />
+                <Section
+                  title="Shipping Charges"
+                  text="Shipping charges, if applicable, will be displayed at checkout before order confirmation. Shipping charges are generally non-refundable unless the return is due to an error from our side, such as an incorrect or damaged item being sent."
+                />
 
-              <Section
-                title="Contact Support"
-                text="If you have questions regarding your shipment, please contact our support team for assistance."
-              />
+                <Section
+                  title="Incorrect Address"
+                  text="Please ensure your shipping address is accurate. Privora is not responsible for orders delivered to incorrect addresses provided by customers."
+                />
+
+                <Section
+                  title="Policy Updates"
+                  text="Privora reserves the right to update or modify this policy at any time to reflect operational needs or regulatory requirements. Any changes will be effective once published on our website. By placing an order with us, you agree to the terms outlined in this policy."
+                />
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </AnimatedSection>
     </div>
   );
 }

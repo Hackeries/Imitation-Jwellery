@@ -1,190 +1,138 @@
-import { getDeviceId } from "@/lib/device-storage";
+import { getCommonHeaders } from "@/lib/api-utils";
 
 export interface Address {
   _id: string;
-  customerId: string;
-  label: string;
   fullName: string;
+  mobile: string;
   line1: string;
   line2?: string;
+  landmark?: string;
   city: string;
   state: string;
   pincode: string;
-  country?: string;
+  country: string;
   isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
+  label: string;
 }
 
-export interface Customer {
-  _id: string;
+export interface AddressFormData {
   fullName: string;
-  email?: string;
   mobile: string;
+  line1: string;
+  line2?: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  label: string;
+  isDefault?: boolean;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
-interface AddressPayload {
-  label?: string;
-  fullName?: string;
-  line1?: string;
-  line2?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-  country?: string;
-  isDefault?: boolean;
-}
-
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
+export const fetchAddresses = async (): Promise<Address[]> => {
+  const res = await fetch(`${API_BASE_URL}/api/v1/addresses`, {
+    headers: getCommonHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data?.items || json.data || [];
 };
 
-const fetchUserProfile = async (): Promise<Customer | null> => {
-  const res = await fetch(`${API_BASE_URL}/api/v1/customers/me`, {
-    credentials: "include",
-    headers: buildHeaders(),
+export const getAddressById = async (id: string): Promise<Address | null> => {
+  const res = await fetch(`${API_BASE_URL}/api/v1/addresses/${id}`, {
+    headers: getCommonHeaders(),
   });
   if (!res.ok) return null;
-  const data = await res.json();
-  return (data?.data?.customer ?? data?.customer ?? null) as Customer | null;
+  const json = await res.json();
+  return json.data?.address || json.data || null;
 };
 
-const getCurrentCustomerId = async (): Promise<string> => {
-  const me = await fetchUserProfile();
-  if (!me?._id || me._id === "guest") {
-    throw new Error("Please sign in to manage addresses");
+export const addAddress = async (data: AddressFormData): Promise<Address> => {
+  const cleanedData: Record<string, unknown> = { ...data };
+
+  // Remove empty optional fields - backend schema rejects empty strings
+  const optionalFields = ['line2', 'landmark', 'country'];
+  for (const field of optionalFields) {
+    if (cleanedData[field] === '' || cleanedData[field] === undefined || cleanedData[field] === null) {
+      delete cleanedData[field];
+    }
   }
-  return me._id;
-};
 
-const getApiError = async (
-  response: Response,
-  fallback = "Request failed"
-): Promise<never> => {
-  let message = fallback;
-  try {
-    const d = await response.json();
-    message = d?.message || d?.error || fallback;
-  } catch {
-    // use fallback
+  // Strip spaces from mobile
+  if (typeof cleanedData.mobile === 'string') {
+    cleanedData.mobile = cleanedData.mobile.replace(/\s/g, '');
   }
-  throw new Error(message);
-};
 
-// ===== READ (List all addresses) =====
-export const fetchAddresses = async (): Promise<Address[]> => {
-  const customerId = await getCurrentCustomerId();
-  const url = `${API_BASE_URL}/api/v1/customers/${customerId}/addresses`;
-  
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "include",
-    headers: buildHeaders(),
-  });
-  
-  if (!response.ok) return getApiError(response, "Failed to fetch addresses");
-  
-  const data = await response.json();
-  return data?.data?.items ?? data?.items ?? [];
-};
-
-// ===== CREATE =====
-export const addAddress = async (
-  addressData: Omit<Address, "_id" | "customerId" | "createdAt" | "updatedAt">
-): Promise<Address> => {
-  const customerId = await getCurrentCustomerId();
-  const {
-    label,
-    fullName,
-    line1,
-    line2,
-    city,
-    state,
-    pincode,
-    country,
-    isDefault,
-  } = addressData;
-  
-  const body: AddressPayload = {
-    label,
-    fullName,
-    line1,
-    line2,
-    city,
-    state,
-    pincode,
-    country,
-    isDefault,
-  };
-
-  const url = `${API_BASE_URL}/api/v1/customers/${customerId}/addresses`;
-  
-  const response = await fetch(url, {
+  const res = await fetch(`${API_BASE_URL}/api/v1/addresses`, {
     method: "POST",
-    headers: buildHeaders(),
-    credentials: "include",
-    body: JSON.stringify(body),
+    headers: getCommonHeaders(),
+    body: JSON.stringify(cleanedData),
   });
 
-  if (!response.ok) return getApiError(response, "Failed to add address");
+  const json = await res.json();
 
-  const data = await response.json();
-  return data?.data?.address ?? data?.address;
+  if (!res.ok) {
+    throw new Error(json.message || json.error || "Failed to add address");
+  }
+
+  return json.data?.address || json.data;
 };
 
-// ===== UPDATE =====
 export const updateAddress = async (
-  addressId: string,
-  addressData: Partial<
-    Omit<Address, "_id" | "customerId" | "createdAt" | "updatedAt">
-  >
+  id: string,
+  data: Partial<AddressFormData>,
 ): Promise<Address> => {
-  const customerId = await getCurrentCustomerId();
-  const url = `${API_BASE_URL}/api/v1/customers/${customerId}/addresses/${addressId}`;
-  const body: AddressPayload = { ...addressData };
+  const cleanedData: Record<string, unknown> = { ...data };
 
-  const response = await fetch(url, {
+  // Remove empty optional fields
+  const optionalFields = ['line2', 'landmark', 'country'];
+  for (const field of optionalFields) {
+    if (cleanedData[field] === '' || cleanedData[field] === undefined || cleanedData[field] === null) {
+      delete cleanedData[field];
+    }
+  }
+
+  // Strip spaces from mobile
+  if (typeof cleanedData.mobile === 'string') {
+    cleanedData.mobile = cleanedData.mobile.replace(/\s/g, '');
+  }
+
+  // Remove email and phone if not needed (backend says: remove email if not available and phone number in update)
+  delete cleanedData.email;
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/addresses/${id}`, {
     method: "PUT",
-    headers: buildHeaders(),
-    credentials: "include",
-    body: JSON.stringify(body),
+    headers: getCommonHeaders(),
+    body: JSON.stringify(cleanedData),
   });
 
-  if (!response.ok) return getApiError(response, "Failed to update address");
-  
-  const data = await response.json();
-  return data?.data?.address ?? data?.address;
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(json.message || json.error || "Failed to update address");
+  }
+
+  return json.data?.address || json.data;
 };
 
-// ===== DELETE =====
-export const deleteAddress = async (
-  addressId: string
-): Promise<{ success: boolean }> => {
-  const customerId = await getCurrentCustomerId();
-  const url = `${API_BASE_URL}/api/v1/customers/${customerId}/addresses/${addressId}`;
-  
-  const response = await fetch(url, {
+export const deleteAddress = async (id: string): Promise<void> => {
+  const res = await fetch(`${API_BASE_URL}/api/v1/addresses/${id}`, {
     method: "DELETE",
-    credentials: "include",
-    headers: buildHeaders(),
+    headers: getCommonHeaders(),
   });
-  
-  if (!response.ok) return getApiError(response, "Failed to delete address");
-  return { success: true };
+  if (!res.ok) throw new Error("Failed to delete address");
 };
 
-// ===== SET DEFAULT =====
-export const setDefaultAddress = async (
-  addressId: string
-): Promise<Address> => {
-  return updateAddress(addressId, { isDefault: true });
+export const setDefaultAddress = async (id: string): Promise<void> => {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/addresses/${id}/set-default`,
+    {
+      method: "PATCH",
+      headers: getCommonHeaders(),
+    },
+  );
+  if (!res.ok) throw new Error("Failed to set default address");
 };

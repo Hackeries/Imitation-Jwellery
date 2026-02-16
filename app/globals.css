@@ -27,24 +27,14 @@
   --font-times: 'timesten';
 }
 
-/* @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-} */
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-poppins);
 }
 
-/* gradient Background */
 body:has(.gradientBg) {
-  /* background: linear-gradient(#fce9ca, #fefffa, #fff) no-repeat; */
-  /* background: linear-gradient(#fce9ca 30%, #fefffa 90%, #fff) no-repeat; */
-  background: linear-gradient(#fce9ca 10%, #fefffa 40%, #fff 70%, #fce9ca) no-repeat;
+  background: #ffffff no-repeat;
   background-repeat: no-repeat;
 }
 
@@ -52,11 +42,9 @@ body:has(.gradientBg) {
   0% {
     transform: translateY(0) rotate(0deg);
   }
-
   50% {
     transform: translateY(-24px) rotate(6deg);
   }
-
   100% {
     transform: translateY(0) rotate(0deg);
   }
@@ -77,8 +65,8 @@ body:has(.gradientBg) {
   transform: scale(1.1);
 }
 
+
 .primaryBtn {
-  /* background: #365953; */
   background: var(--background);
   color: var(--brand);
   font-weight: 600;
@@ -100,12 +88,6 @@ body:has(.gradientBg) {
   width: 100%;
 }
 
-.authPageWrap {
-  background: url(/img/authBg.webp);
-  background-repeat: no-repeat;
-  background-size: cover;
-}
-
 .commonLink {
   font-size: 14px;
   font-weight: 600;
@@ -115,7 +97,6 @@ body:has(.gradientBg) {
   0% {
     transform: translateX(0%);
   }
-
   100% {
     transform: translateX(-50%);
   }
@@ -133,7 +114,6 @@ body:has(.gradientBg) {
   0% {
     transform: translateX(0%);
   }
-
   100% {
     transform: translateX(-50%);
   }
@@ -146,7 +126,6 @@ body:has(.gradientBg) {
 .group:hover .animate-marquee-left {
   animation-play-state: paused;
 }
-
 
 @keyframes marquee-strip {
   0% {
@@ -162,19 +141,17 @@ body:has(.gradientBg) {
   width: max-content;
   animation: marquee-strip 20s linear infinite;
 }
+
 .group:hover .marquee-track {
   animation-play-state: paused;
 }
 
-/* Hide number input arrows */
-/* Chrome, Safari, Edge, Opera */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-/* Firefox */
 input[type=number] {
   -moz-appearance: textfield;
 }
@@ -197,10 +174,6 @@ input[type=number] {
   gap: 24px;
 }
 
-/* Login Page animation start */
-/* ================================
-   Animated Gradient Background
-================================ */
 .login-gradient {
   background: linear-gradient(120deg,
       #fce9ca 10%,
@@ -215,17 +188,14 @@ input[type=number] {
   0% {
     background-position: 0% 50%;
   }
-
   50% {
     background-position: 100% 50%;
   }
-
   100% {
     background-position: 0% 50%;
   }
 }
 
-/* Floating Cart Icons */
 .cart-float {
   position: absolute;
   bottom: -20vh;
@@ -250,18 +220,25 @@ input[type=number] {
   from {
     transform: translateY(0);
   }
-
   to {
     transform: translateY(-140vh);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .login-gradient,
   .cart-float {
     animation: none;
   }
+}
+
+/* AnimatedSection transition classes */
+.duration-600 {
+  transition-duration: 600ms;
+}
+
+.translate-y-10 {
+  transform: translateY(2.5rem);
 }
 
 .authPageWrap {
@@ -269,7 +246,6 @@ input[type=number] {
 }
 
 .mobileMenuWrap {
-  /* animation: swipeLToR 0.8s normal 0s normal normal; */
   animation: swipeLToR;
   animation-duration: 0.8s;
 }
@@ -279,38 +255,42 @@ input[type=number] {
     transform: translateX(-100%);
     opacity: 0.5;
   }
-
   to {
     transform: translateX(0%);
     opacity: 1;
   }
 }
-.commonSliderWrap .swiper{
+
+.commonSliderWrap .swiper {
   margin: 0 -30px;
   padding: 0 30px 40px;
 }
-/* 
-.commonSliderWrap .swiper-button-prev{
-  right: 55% !important;
-  left: unset !important;
-}
-.commonSliderWrap .swiper-button-next{
-  left: 55% !important;
-  right: unset !important;
-} */
+
 .commonSliderWrap .swiper-button-prev,
-.commonSliderWrap .swiper-button-next{
+.commonSliderWrap .swiper-button-next {
   background-color: var(--background);
   border-radius: 50%;
-  /* top: unset !important; */
-  /* bottom: 0; */
 }
+
 .commonSliderWrap .swiper-button-prev svg,
-.commonSliderWrap .swiper-button-next svg{
+.commonSliderWrap .swiper-button-next svg {
   height: 22px;
   width: 22px;
   color: var(--foreground) !important;
 }
+
 .commonSliderWrap .swiper-pagination-bullet-active {
-    background: var(--brand);
+  background: var(--brand);
+}
+
+.searchInputWrap input:focus {
+  box-shadow: unset;
+}
+
+.headerSearchMdBtn {
+  display: none;
+}
+
+.noShadow {
+  box-shadow: unset !important;
 }

@@ -1,204 +1,169 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchCart,
   addToCart,
   removeFromCart,
-  updateCartQuantity,
-  clearCart,
-  type Cart,
+  updateCartItemQuantity,
 } from "@/services/cart-service";
-
-/* ---------------- BASE CART QUERY ---------------- */
+import { toast } from "sonner";
+import { Cart } from "@/types/index";
+import { NetworkError } from "@/lib/error-handler";
 
 export const useCart = () => {
-  return useQuery<Cart, Error>({
+  return useQuery<Cart | null>({
     queryKey: ["cart"],
     queryFn: fetchCart,
-    staleTime: 1000 * 30,
-    gcTime: 1000 * 60 * 5,
-    retry: 1,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+    refetchOnWindowFocus: false,
+    throwOnError: false,
   });
 };
 
-/* ---------------- DERIVED STATE (REACTIVE) ---------------- */
-
 export const useCartCount = () => {
   const { data } = useCart();
-  return data?.items.reduce((sum, item) => sum + (item.quantity ?? 1), 0) ?? 0;
+  return data?.items?.length || 0;
 };
-
-export const useCartTotal = () => {
-  const { data } = useCart();
-  return data?.total ?? 0;
-};
-
-/* ---------------- MUTATIONS ---------------- */
 
 export const useAddToCart = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  return useMutation<
-    Cart,
-    Error,
-    {
+  return useMutation({
+    mutationFn: ({
+      productId,
+      quantity = 1,
+    }: {
       productId: string;
-      name: string;
-      price: number;
-      image: string;
       quantity?: number;
+      name?: string;
+      price?: number;
+      image?: string;
+    }) => addToCart(productId, quantity),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["cart"] });
+      const previousCart = queryClient.getQueryData<Cart | null>(["cart"]);
+
+      if (previousCart) {
+        const newItem = {
+          productId: variables.productId,
+          quantity: variables.quantity ?? 1,
+          qty: variables.quantity ?? 1,
+          price: variables.price ?? 0,
+          unitPrice: variables.price ?? 0,
+          name: variables.name ?? "",
+          image: variables.image ?? "",
+        };
+        queryClient.setQueryData<Cart>(["cart"], {
+          ...previousCart,
+          items: [...previousCart.items, newItem],
+        });
+      }
+
+      return { previousCart };
     },
-    { prev?: Cart }
-  >({
-    mutationFn: ({ productId, name, price, image, quantity = 1 }) =>
-      addToCart(productId, name, price, image, quantity),
-
-    onMutate: async ({ productId, name, price, image, quantity = 1 }) => {
-      await qc.cancelQueries({ queryKey: ["cart"] });
-
-      const prev = qc.getQueryData<Cart>(["cart"]) ?? { items: [], total: 0 };
-
-      const existing = prev.items.find((i) => i.productId === productId);
-
-      const items = existing
-        ? prev.items.map((i) =>
-            i.productId === productId
-              ? { ...i, quantity: i.quantity + quantity }
-              : i
-          )
-        : [
-            ...prev.items,
-            {
-              id: `temp-${productId}`,
-              productId,
-              name,
-              price,
-              quantity,
-              image,
-            },
-          ];
-
-      qc.setQueryData<Cart>(["cart"], {
-        items,
-        total: items.reduce((s, i) => s + i.price * i.quantity, 0),
-      });
-
-      return { prev };
+    onError: (error, _vars, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["cart"], context.previousCart);
+      }
+      const errorMessage = error instanceof Error ? error.message : "Failed to add to cart";
+      if (error instanceof NetworkError && error.isNetworkError) {
+        toast.error("Network Error", {
+          description: "Cannot connect to server. Please check your connection.",
+        });
+      } else {
+        toast.error(errorMessage);
+      }
     },
-
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
+    onSuccess: () => {
+      toast.success("Added to cart");
     },
-
-    onSuccess: (cart) => {
-      qc.setQueryData<Cart>(["cart"], cart);
-    },
-
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["cart"] });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
     },
   });
 };
 
 export const useRemoveFromCart = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  return useMutation<Cart, Error, string, { prev?: Cart }>({
-    mutationFn: removeFromCart,
-
-    onMutate: async (cartItemId) => {
-      await qc.cancelQueries({ queryKey: ["cart"] });
-
-      const prev = qc.getQueryData<Cart>(["cart"]) ?? { items: [], total: 0 };
-
-      const items = prev.items.filter((i) => i.id !== cartItemId);
-
-      qc.setQueryData<Cart>(["cart"], {
-        items,
-        total: items.reduce((s, i) => s + i.price * i.quantity, 0),
-      });
-
-      return { prev };
+  return useMutation({
+    mutationFn: (productId: string) => removeFromCart(productId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
+      toast.success("Removed from cart");
     },
-
-    onError: (_e, _id, ctx) => {
-      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
-    },
-
-    onSuccess: (cart) => {
-      qc.setQueryData<Cart>(["cart"], cart);
-    },
-
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["cart"] });
+    onError: (error) => {
+      if (error instanceof NetworkError && error.isNetworkError) {
+        toast.error("Network Error", {
+          description: "Cannot connect to server. Please try again later.",
+        });
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to remove item",
+        );
+      }
     },
   });
 };
 
 export const useUpdateCartQuantity = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
 
-  return useMutation<
-    Cart,
-    Error,
-    { cartItemId: string; quantity: number },
-    { prev?: Cart }
-  >({
-    mutationFn: ({ cartItemId, quantity }) =>
-      updateCartQuantity(cartItemId, quantity),
+  return useMutation({
+    mutationFn: ({
+      productId,
+      quantity,
+    }: {
+      productId: string;
+      quantity: number;
+    }) => updateCartItemQuantity(productId, quantity),
+    onMutate: async ({ productId, quantity }) => {
+      await queryClient.cancelQueries({ queryKey: ["cart"] });
+      const previousCart = queryClient.getQueryData<Cart | null>(["cart"]);
 
-    onMutate: async ({ cartItemId, quantity }) => {
-      await qc.cancelQueries({ queryKey: ["cart"] });
+      if (previousCart) {
+        const updatedItems = previousCart.items.map((item) =>
+          item.productId === productId
+            ? { ...item, quantity, qty: quantity }
+            : item,
+        );
+        const newSubtotal = updatedItems.reduce(
+          (sum, item) => sum + item.unitPrice * item.quantity,
+          0,
+        );
+        queryClient.setQueryData<Cart>(["cart"], {
+          ...previousCart,
+          items: updatedItems,
+          subtotalAmount: newSubtotal,
+          totalAmount:
+            newSubtotal -
+            previousCart.discountAmount +
+            previousCart.shippingAmount,
+          total:
+            newSubtotal -
+            previousCart.discountAmount +
+            previousCart.shippingAmount,
+        });
+      }
 
-      const prev = qc.getQueryData<Cart>(["cart"]) ?? {
-        items: [],
-        total: 0,
-      };
-
-      const items =
-        quantity <= 0
-          ? prev.items.filter((i) => i.id !== cartItemId)
-          : prev.items.map((i) =>
-              i.id === cartItemId ? { ...i, quantity } : i
-            );
-
-      qc.setQueryData<Cart>(["cart"], {
-        items,
-        total: items.reduce((s, i) => s + i.price * i.quantity, 0),
-      });
-
-      return { prev };
+      return { previousCart };
     },
-
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData<Cart>(["cart"], ctx.prev);
+    onError: (error, _vars, context) => {
+      if (context?.previousCart) {
+        queryClient.setQueryData(["cart"], context.previousCart);
+      }
+      if (error instanceof NetworkError && error.isNetworkError) {
+        toast.error("Network Error", {
+          description: "Cannot connect to server. Please try again later.",
+        });
+      } else {
+        toast.error("Failed to update quantity");
+      }
     },
-
-    onSuccess: (cart) => {
-      qc.setQueryData<Cart>(["cart"], cart);
-    },
-
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["cart"] });
-    },
-  });
-};
-
-export const useClearCart = () => {
-  const qc = useQueryClient();
-
-  return useMutation<Cart, Error, void>({
-    mutationFn: clearCart,
-
-    onSuccess: (cart) => {
-      qc.setQueryData<Cart>(["cart"], cart);
-    },
-
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["cart"] });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
     },
   });
 };

@@ -2,11 +2,12 @@
 
 import { Fragment } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { X, Search, Loader2 } from "lucide-react";
+import { Search, X, Loader2, ShoppingBag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import CommonInput from "./input/CommonInput";
 import { useSearchState } from "@/hooks/use-search";
+import { FALLBACK_IMAGE } from "@/constants";
 
 type SearchDrawerProps = {
   open: boolean;
@@ -103,7 +104,7 @@ export default function SearchDrawer({ open, onClose }: SearchDrawerProps) {
                       >
                         <div className="relative w-16 min-w-16 h-16 rounded-md overflow-hidden bg-foreground/10">
                           <Image
-                            src={product.image || "/img/placeholder.webp"}
+                            src={product.image || FALLBACK_IMAGE}
                             alt={product.title}
                             fill
                             className="object-cover"

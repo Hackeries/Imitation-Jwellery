@@ -59,6 +59,9 @@ const HomeStoreFeature: React.FC = () => {
           ))}
         </div>
       </div>
+      <p className="text-center text-sm md:text-base text-foreground/80 leading-relaxed max-w-3xl mx-auto mt-8 md:mt-12">
+        At Privora, we bring you simply stunning jewelry we love — affordable pieces for everyone, crafted by people just like you.
+      </p>
     </section>
   );
 };

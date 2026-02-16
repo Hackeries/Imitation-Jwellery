@@ -1,5 +1,5 @@
-import { getDeviceId } from "@/lib/device-storage";
-import { formatPrice } from "@/lib/api-utils";
+import { formatPrice, getCommonHeaders } from "@/lib/api-utils";
+import { FALLBACK_IMAGE } from "@/constants";
 
 export interface ProductDetail {
   id: string;
@@ -42,15 +42,6 @@ interface BackendProductDetail {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {};
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
-};
-
 const transformProductDetail = (
   backendProduct: BackendProductDetail
 ): ProductDetail => {
@@ -63,11 +54,11 @@ const transformProductDetail = (
     image:
       backendProduct.thumbnail ||
       backendProduct.images?.[0] ||
-      "/img/placeholder.webp",
+      FALLBACK_IMAGE,
     images:
       Array.isArray(backendProduct.images) && backendProduct.images.length > 0
         ? backendProduct.images
-        : [backendProduct.thumbnail || "/img/placeholder.webp"],
+        : [backendProduct.thumbnail || FALLBACK_IMAGE],
     vendor: "Privora",
     type: "Jewelry",
     sku: backendProduct.sku || "",
@@ -94,11 +85,11 @@ export const fetchProductDetail = async (
   if (!productId || productId === "undefined") {
     throw new Error("Invalid product id");
   }
-  
+
   const url = `${API_BASE_URL}/api/v1/products/${productId}`;
 
   const response = await fetch(url, {
-    headers: buildHeaders(),
+    headers: getCommonHeaders(),
   });
 
   if (!response.ok) {

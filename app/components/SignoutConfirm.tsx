@@ -56,6 +56,8 @@ export default function SignOutConfirmModal({
                   <button
                     onClick={onClose}
                     className="p-2 rounded-full hover:bg-foreground/10"
+                    aria-label="Close"
+                    title="Close"
                   >
                     <X size={18} />
                   </button>

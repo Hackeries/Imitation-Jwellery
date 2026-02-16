@@ -21,34 +21,41 @@ export default function EmptyStateSection({
   buttonHref,
 }: EmptyStateSectionProps) {
   return (
-    <section className="flex flex-col items-center justify-center text-center px-4 py-12 sm:py-16 lg:py-20 max-w-3xl mx-auto">
-      
-      {/* IMAGE */}
-      <div className="relative w-36 h-36 sm:w-44 sm:h-44 mb-6 sm:mb-4">
-        <Image
-          src={image}
-          alt={title}
-          fill
-          className="object-contain"
-          priority
+    <section className="px-4 py-8 md:py-12 flex justify-center">
+      <div className="w-full max-w-2xl bg-[#fefbf6] border border-[#4E342E]/10 rounded-3xl p-8 md:p-12 flex flex-col items-center justify-center text-center shadow-lg shadow-[#4E342E]/5">
+
+        {/* IMAGE */}
+        <div className="relative w-32 h-32 md:w-40 md:h-40 mb-6">
+          <Image
+            src={image}
+            alt={title}
+            fill
+            className="object-contain opacity-90"
+            priority
+          />
+        </div>
+
+        {/* TEXT */}
+        <CommonHeading
+          level={2}
+          title={<span className="font-times italic text-3xl md:text-4xl text-[#4E342E]">{title}</span>}
+          description={description}
+          className="mb-2"
+          descriptionClassName="text-[#4E342E]/70 max-w-md mx-auto text-base"
+          noMargin
         />
-      </div>
 
-      {/* TEXT */}
-      <CommonHeading
-        level={2}
-        title={title}
-        description={description}
-        noMargin
-      />
-
-      {/* ACTION */}
-      <div className="mt-6 sm:mt-8">
-        <Link href={buttonHref}>
-          <CommonButton className="px-6 sm:px-8 py-3 text-sm sm:text-base">
-            {buttonText}
-          </CommonButton>
-        </Link>
+        {/* ACTION */}
+        <div className="mt-8">
+          <Link href={buttonHref}>
+            <CommonButton
+              variant="secondaryBtn"
+              className="px-8 py-3 text-sm tracking-widest min-w-[200px]"
+            >
+              {buttonText}
+            </CommonButton>
+          </Link>
+        </div>
       </div>
     </section>
   );

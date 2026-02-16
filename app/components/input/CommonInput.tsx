@@ -13,12 +13,15 @@ type CommonInputProps = {
   value?: string;
   defaultValue?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   required?: boolean;
   disabled?: boolean;
   className?: string;
   iconInput?: boolean;
   noMargin?: boolean;
   error?: string;
+  autoFocus?: boolean;
   inputMode?:
     | "text"
     | "email"
@@ -27,6 +30,7 @@ type CommonInputProps = {
     | "numeric"
     | "decimal"
     | "search";
+  maxLength?: number;
 };
 
 const CommonInput: React.FC<CommonInputProps> = ({
@@ -37,17 +41,30 @@ const CommonInput: React.FC<CommonInputProps> = ({
   value,
   defaultValue,
   onChange,
+  onKeyDown,
+  onBlur,
   required = false,
   disabled = false,
   className = "",
   iconInput = false,
   noMargin = false,
   error,
+  autoFocus = false,
   inputMode,
+  maxLength,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
+  const isTel = type === "tel";
   const hasError = !!error;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const target = e.target as HTMLInputElement;
+    if (e.key === " " && target.value.length === 0) {
+      e.preventDefault();
+    }
+    onKeyDown?.(e);
+  };
 
   return (
     <div className={`${noMargin ? "" : "mb-5"} w-full`}>
@@ -70,12 +87,17 @@ const CommonInput: React.FC<CommonInputProps> = ({
           value={value}
           defaultValue={defaultValue}
           onChange={onChange}
+          onKeyDown={handleKeyDown}
+          onBlur={onBlur}
           disabled={disabled}
           required={required}
+          autoFocus={autoFocus}
           inputMode={inputMode}
+          maxLength={isTel ? 10 : maxLength}
+          pattern={isTel ? "[0-9]*" : undefined}
           className={`
-            w-full rounded-md border px-4 py-3 text-sm
-            outline-none transition focus:ring-1
+            w-full rounded-md border border-gray-300 px-4 py-3 text-base sm:text-sm
+            outline-none transition focus:border-primary focus:ring-1 focus:ring-primary
             disabled:bg-gray-100 disabled:cursor-not-allowed
             ${
               hasError

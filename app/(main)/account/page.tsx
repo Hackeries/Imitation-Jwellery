@@ -1,26 +1,42 @@
 "use client";
+
+import AuthGuard from "@/app/components/AuthGuard";
+import AnimatedSection from "@/app/components/AnimatedSection";
 import CommonButton from "@/app/components/button/CommonButton";
 import CommonHeading from "@/app/components/CommonHeading";
-import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
-import { Edit2Icon, Lock, Plus, Pencil, Trash2 } from "lucide-react";
-import AddAddressModal, { type AddAddressPayload } from "./AddAddressModal";
-import { useState } from "react";
-import EditProfileModal from "./EditProfileModal";
-import Link from "next/link";
-import SignOutConfirmModal from "@/app/components/SignoutConfirm";
 import DeleteAddressConfirmModal from "@/app/components/DeleteAddressConfirm";
-import { useUserProfile, useLogout } from "@/hooks/use-auth";
-import { useOrders } from "@/hooks/use-orders";
+import SignOutConfirmModal from "@/app/components/SignoutConfirm";
+import { OrderListSkeleton } from "@/app/components/skeleton";
 import {
-  useAddresses,
   useAddAddress,
+  useAddresses,
   useDeleteAddress,
   useSetDefaultAddress,
   useUpdateAddress,
 } from "@/hooks/use-address";
-import type { Address } from "@/services/address-service";
+import { useLogout, useUserProfile, useIsLoggedIn } from "@/hooks/use-auth";
+import { useOrders, useOrderDetails } from "@/hooks/use-orders";
+import { useOrderReviews } from "@/hooks/use-reviews";
+import type { Address, AddressFormData } from "@/services/address-service";
+import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
+import {
+  Edit2Icon,
+  Loader2,
+  Lock,
+  MapPin,
+  Pencil,
+  Plus,
+  Package,
+  StarIcon,
+  Trash2,
+  ChevronRight,
+} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import AddAddressModal, { type AddAddressPayload } from "./AddAddressModal";
+import EditProfileModal from "./EditProfileModal";
+import RateOrderModal from "./RateOrderModal";
 
-// UI mapping type for display only
 type DisplayAddress = {
   id: string;
   name: string;
@@ -36,74 +52,123 @@ function backendToDisplayAddress(backend: Address): DisplayAddress {
     address: backend.line1 + (backend.line2 ? `, ${backend.line2}` : ""),
     cityZip: `${backend.city}, ${backend.state} ${backend.pincode}`.replace(
       /\s+/g,
-      " "
+      " ",
     ),
     isDefault: backend.isDefault,
   };
 }
 
+function OrderRatingBadge({
+  orderId,
+  onRate,
+  onViewReviews,
+}: {
+  orderId: string;
+  onRate: (e: React.MouseEvent) => void;
+  onViewReviews: (e: React.MouseEvent) => void;
+}) {
+  const { data: reviews = [] } = useOrderReviews(orderId);
+  const hasReviewed = reviews.length > 0;
+  const avgRating =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : 0;
+
+  if (hasReviewed) {
+    return (
+      <button
+        type="button"
+        onClick={onViewReviews}
+        className="flex items-center gap-1 text-sm hover:opacity-80 transition-opacity cursor-pointer"
+      >
+        {[1, 2, 3, 4, 5].map((star) => (
+          <StarIcon
+            key={star}
+            className={`size-4 ${star <= Math.round(avgRating)
+              ? "text-amber-500 fill-amber-500"
+              : "text-gray-300"
+              }`}
+          />
+        ))}
+        <span className="ml-1 text-foreground/60 text-xs">
+          {avgRating.toFixed(1)}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onRate}
+      className="flex items-center gap-1 text-sm text-brand hover:underline font-medium"
+    >
+      <StarIcon className="text-amber-500 fill-amber-500 size-5" />
+      Rate & Review
+    </button>
+  );
+}
+
 export default function Account() {
+  const [openRateOrder, setOpenRateOrder] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [rateModalMode, setRateModalMode] = useState<"edit" | "view">("edit");
   const [openAddAddress, setOpenAddAddress] = useState(false);
   const [isEditAddress, setIsEditAddress] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<Address | null>(null); // full backend type!
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null);
   const [openEditProfile, setOpenEditProfile] = useState(false);
   const [openSignOutConfirm, setOpenSignOutConfirm] = useState(false);
   const [openDeleteAddress, setOpenDeleteAddress] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
-    null
+    null,
   );
 
-  // Full backend data for profile and addresses
   const { data: userProfile } = useUserProfile();
-  const { data: orders = [] } = useOrders();
+  const { data: orders = [], isLoading: ordersLoading } = useOrders();
   const { data: backendAddresses = [], isLoading: addressLoading } =
     useAddresses();
+  const { data: selectedOrderDetails } = useOrderDetails(selectedOrderId || "");
+  const { data: orderReviews = [] } = useOrderReviews(selectedOrderId || "");
+
   const logout = useLogout();
   const addAddress = useAddAddress();
   const updateAddress = useUpdateAddress();
   const deleteAddress = useDeleteAddress();
   const setDefaultAddress = useSetDefaultAddress();
 
-  // UI mapping ONLY for display
-  const addresses: DisplayAddress[] = backendAddresses.map(
-    backendToDisplayAddress
-  );
+  const userName = userProfile?.fullName || "Guest User";
+  const userPhone = userProfile?.mobile || "";
+  const userEmail = userProfile?.email || "";
 
-  const userName = userProfile?.fullName || "User";
-  const userPhone = userProfile?.mobile || "+91 0000000000";
-  const userEmail = userProfile?.email || "user@example.com";
-
-  const handleSignOut = () => {
-    logout.mutate();
-    setOpenSignOutConfirm(false);
-  };
-
-  const handleAddressSave = (backendPayload: AddAddressPayload) => {
-    const label = "Home";
-    // Only set as default if it's the first address, or whatever your business logic is
+  const handleAddressSave = (payload: AddAddressPayload) => {
     const isDefault =
-      isEditAddress && editingAddress
-        ? editingAddress.isDefault
-        : backendAddresses.length === 0;
+      backendAddresses.length === 0
+        ? true
+        : (isEditAddress && editingAddress?.isDefault) || false;
 
-    const payloadWithRequired = {
-      ...backendPayload,
-      label,
+    const finalPayload: AddressFormData = {
+      ...payload,
       isDefault,
     };
 
     if (isEditAddress && editingAddress) {
-      updateAddress.mutate({
-        addressId: editingAddress._id,
-        addressData: payloadWithRequired,
-      });
+      updateAddress.mutate(
+        { addressId: editingAddress._id, addressData: finalPayload },
+        {
+          onSuccess: () => {
+            setOpenAddAddress(false);
+            setIsEditAddress(false);
+            setEditingAddress(null);
+          },
+        },
+      );
     } else {
-      addAddress.mutate(payloadWithRequired);
+      addAddress.mutate(finalPayload, {
+        onSuccess: () => {
+          setOpenAddAddress(false);
+        },
+      });
     }
-
-    setOpenAddAddress(false);
-    setIsEditAddress(false);
-    setEditingAddress(null);
   };
 
   const handleDeleteAddress = () => {
@@ -114,248 +179,318 @@ export default function Account() {
     }
   };
 
-  const handleSetDefaultAddress = (addressId: string) => {
-    setDefaultAddress.mutate(addressId);
-  };
-
-  // Pass backend address for editing, not display mapping
   const handleEditAddress = (addressId: string) => {
     const found = backendAddresses.find((a) => a._id === addressId) || null;
-    setEditingAddress(found);
-    setIsEditAddress(true);
-    setOpenAddAddress(true);
+    if (found) {
+      setEditingAddress(found);
+      setIsEditAddress(true);
+      setOpenAddAddress(true);
+    }
   };
+
+  const handleOpenRateModal = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setRateModalMode("edit");
+    setOpenRateOrder(true);
+  };
+
+  const handleViewReviews = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setRateModalMode("view");
+    setOpenRateOrder(true);
+  };
+
+  const isSaving = addAddress.isPending || updateAddress.isPending;
 
   return (
     <>
-      <div className="accountPage gradientBg">
-        <section className="max-w-full px-4 md:px-6 lg:px-10 md:py-12 lg:py-12">
-          <CommonHeading
-            level={1}
-            title="Account"
-            description="Proudly Supporting Ethical Sourcing - Every Gemstone Has a Story."
-          />
+      <div className="accountPage bg-background min-h-screen">
+        <AnimatedSection>
+          <section className="max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-12">
+            <CommonHeading
+              level={1}
+              title="My Account"
+              description="Manage your orders, addresses, and account details."
+              className="mb-8 md:mb-12 text-center"
+            />
 
-          {/* PRODUCT GRID */}
-          <div className="accountSecWrap grid grid-cols-1 gap-5 max-w-5xl mx-auto">
-            <div className="accountUserCard p-4 md:p-6 rounded-2xl bg-brand flex items-center gap-4">
-              <div className="flex-1">
-                <h6 className="text-background text-2xl font-medium font-times mb-0.5">
-                  {userName}
-                </h6>
-                <p className="text-background/80 text-sm mb-0.5">{userPhone}</p>
-                <p className="text-background/80 text-sm mb-0">{userEmail}</p>
+            <TabGroup vertical className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+              {/* SIDEBAR - LEFT COLUMN */}
+              <div className="lg:col-span-3 space-y-6 lg:sticky lg:top-24 lg:self-start">
+                {/* User Profile Card - Brand Brown */}
+                <div className="bg-brand border border-brand/10 rounded-2xl p-6 shadow-sm flex flex-col items-center text-center text-white">
+                  <div className="h-20 w-20 rounded-full bg-white/10 flex items-center justify-center text-white mb-4 shadow-inner">
+                    <span className="font-times text-3xl font-bold">
+                      {userName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <h3 className="font-times text-xl font-medium text-white mb-1">
+                    {userName}
+                  </h3>
+                  <p className="text-sm text-white/70 mb-4">{userEmail}</p>
+
+                  <button
+                    onClick={() => setOpenEditProfile(true)}
+                    className="text-xs font-semibold uppercase tracking-wider text-white hover:text-white/80 hover:underline transition"
+                  >
+                    Edit Profile
+                  </button>
+                </div>
+
+                {/* Navigation Menu */}
+                <div className="bg-white border border-foreground/10 rounded-2xl p-3 shadow-sm overflow-hidden">
+                  <TabList className="flex flex-col gap-1">
+                    {[
+                      { name: "My Orders", icon: MapPin }, // Icon placeholder, distinct below
+                      { name: "My Addresses", icon: MapPin },
+                      { name: "Settings", icon: Lock }
+                    ].map((tab, idx) => (
+                      <Tab
+                        key={tab.name}
+                        className={({ selected }) =>
+                          `flex items-center gap-3 w-full px-4 py-3 text-left text-sm font-medium rounded-xl transition-all duration-200 outline-none ${selected
+                            ? "bg-brand text-background shadow-md"
+                            : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
+                          }`
+                        }
+                      >
+                        {/* Icons handled conditionally for cleaner code if creating array above is messy with imports */}
+                        {idx === 0 && <Package className="w-4 h-4" />}
+                        {idx === 1 && <MapPin className="w-4 h-4" />}
+                        {idx === 2 && <Lock className="w-4 h-4" />}
+                        {tab.name}
+                      </Tab>
+                    ))}
+                  </TabList>
+
+                  <div className="mt-3 pt-3 border-t border-foreground/10 px-3 pb-1">
+                    <button
+                      onClick={() => setOpenSignOutConfirm(true)}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-left text-sm font-medium text-red-600 rounded-xl hover:bg-red-50 transition-all duration-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => setOpenEditProfile(true)}
-                className="flex items-center gap-3 max-w-fit bg-background px-6 py-3 rounded-[30px] uppercase font-medium cursor-pointer"
-              >
-                <Edit2Icon className="w-4 h-4 text-brand" /> Edit Profile
-              </button>
-            </div>
-            <div className="bg-background/50 border border-foreground/10 rounded-2xl p-3 md:p-6">
-              <TabGroup className="accountTabsWrap">
-                <TabList className="flex items-center rounded-2xl bg-foreground/10 p-1 w-fit">
-                  <Tab className="accountTabsLink px-3 md:px-4 py-2 rounded-xl text-foreground font-medium text-sm focus:not-data-focus:outline-none data-focus:outline data-focus:outline-background data-hover:bg-background/50 data-selected:bg-background data-selected:data-hover:bg-background transition-all transition-400">
-                    My Orders
-                  </Tab>
-                  <Tab className="accountTabsLink px-3 md:px-4 py-2 rounded-xl text-foreground font-medium text-sm focus:not-data-focus:outline-none data-focus:outline data-focus:outline-background data-hover:bg-background/50 data-selected:bg-background data-selected:data-hover:bg-background transition-all transition-400">
-                    My Addresses
-                  </Tab>
-                  <Tab className="accountTabsLink px-3 md:px-4 py-2 rounded-xl text-foreground font-medium text-sm focus:not-data-focus:outline-none data-focus:outline data-focus:outline-background data-hover:bg-background/50 data-selected:bg-background data-selected:data-hover:bg-background transition-all transition-400">
-                    Settings
-                  </Tab>
-                </TabList>
-                <TabPanels>
-                  <TabPanel>
-                    <div className="pt-5">
-                      <CommonHeading level={2} title="My Orders" />
 
-                      <div className="space-y-4">
-                        {Array.isArray(orders) && orders.length > 0 ? (
-                          orders.map((order) => (
+              {/* CONTENT - RIGHT COLUMN */}
+              <div className="lg:col-span-9">
+                <TabPanels>
+                  <TabPanel className="focus:outline-none">
+                    <div className="bg-white border border-foreground/10 rounded-2xl p-6 md:p-8 shadow-sm min-h-[500px]">
+                      <h2 className="font-times text-2xl mb-6 pb-4 border-b border-foreground/10">Order History</h2>
+
+                      {ordersLoading ? (
+                        <OrderListSkeleton count={3} />
+                      ) : orders.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <div className="h-16 w-16 bg-foreground/5 rounded-full flex items-center justify-center mb-4">
+                            <MapPin className="text-foreground/30 w-8 h-8" />
+                          </div>
+                          <p className="text-lg font-medium text-foreground mb-2">No orders yet</p>
+                          <p className="text-foreground/60 mb-6 max-w-xs">Looks like you haven't placed any orders yet.</p>
+                          <Link
+                            href="/product-list"
+                            className="bg-brand text-background px-6 py-3 rounded-full font-medium hover:opacity-90 transition"
+                          >
+                            Start Shopping
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                          {orders.map((order) => (
                             <Link
                               key={order.id}
                               href={`/orders/${order.id}`}
-                              className="block border border-foreground/20 rounded-xl p-5 hover:bg-foreground/5 transition"
+                              className="block border border-foreground/10 rounded-xl p-5 hover:border-brand/30 hover:shadow-md transition-all group bg-background"
                             >
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                {/* LEFT */}
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
-                                  <p className="font-medium">
-                                    Order #{order.id}
-                                  </p>
-                                  <p className="text-sm text-foreground/70">
-                                    Placed on {order.date} • {order.items}{" "}
-                                    item(s)
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className="font-mono text-sm px-2 py-1 bg-foreground/5 rounded-md text-foreground/70">#{order.orderNumber}</span>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${order.status === "Delivered"
+                                      ? "bg-green-100 text-green-700"
+                                      : order.status === "Cancelled"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-amber-100 text-amber-700"
+                                      }`}>
+                                      {order.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-foreground/60">
+                                    {order.date} • {order.itemsCount} Items • <span className="font-medium text-foreground">{order.total}</span>
                                   </p>
                                 </div>
 
-                                {/* RIGHT */}
-                                <div className="flex items-center gap-6">
-                                  <p className="text-sm font-medium">
-                                    {order.total}
-                                  </p>
-
-                                  <span
-                                    className={`px-3 py-1 text-xs rounded-full ${
-                                      order.status === "Delivered"
-                                        ? "bg-green-100 text-green-700"
-                                        : order.status === "Shipped"
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "bg-yellow-100 text-yellow-700"
-                                    }`}
-                                  >
-                                    {order.status}
-                                  </span>
+                                <div className="flex items-center gap-3">
+                                  {order.status === "Delivered" && (
+                                    <div onClick={(e) => e.preventDefault()}>
+                                      <OrderRatingBadge
+                                        orderId={order.id}
+                                        onRate={(e) => {
+                                          e.preventDefault();
+                                          handleOpenRateModal(order.id);
+                                        }}
+                                        onViewReviews={(e) => {
+                                          e.preventDefault();
+                                          handleViewReviews(order.id);
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="h-8 w-8 rounded-full bg-foreground/5 flex items-center justify-center group-hover:bg-brand group-hover:text-white transition-colors">
+                                    <ChevronRight className="w-4 h-4 text-foreground/40 group-hover:text-white transition-colors" />
+                                  </div>
                                 </div>
                               </div>
                             </Link>
-                          ))
-                        ) : (
-                          <p className="text-foreground/60 text-sm">
-                            No orders yet
-                          </p>
-                        )}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </TabPanel>
-                  <TabPanel>
-                    <div className="pt-5">
-                      <CommonHeading level={2} title="My Addresses" />
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                  <TabPanel className="focus:outline-none">
+                    <div className="bg-white border border-foreground/10 rounded-2xl p-6 md:p-8 shadow-sm min-h-[500px]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-foreground/10">
+                        <h2 className="font-times text-2xl">Saved Addresses</h2>
                         <button
+                          type="button"
                           onClick={() => {
-                            setOpenAddAddress(true);
                             setIsEditAddress(false);
                             setEditingAddress(null);
+                            setOpenAddAddress(true);
                           }}
-                          className="border-2 border-dashed border-foreground/20 rounded-xl p-6 flex flex-col items-center justify-center text-foreground hover:bg-primary/5 transition min-h-55"
+                          className="flex items-center gap-2 bg-brand text-background px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition"
                         >
-                          <Plus size={28} />
-                          <span className="mt-2 font-medium tracking-wide">
-                            ADD NEW ADDRESS
-                          </span>
+                          <Plus size={16} />
+                          Add New
                         </button>
+                      </div>
 
-                        {addressLoading ? (
-                          <p>Loading...</p>
-                        ) : addresses.length === 0 ? (
-                          <p className="text-foreground/60 text-sm col-span-2">
-                            No addresses yet
-                          </p>
-                        ) : (
-                          addresses.map((address) => (
-                            <div
-                              key={address.id}
-                              className="border border-foreground/20 rounded-xl p-5 flex flex-col justify-between"
-                            >
-                              {/* HEADER: NAME + EDIT */}
-                              <div className="flex items-start justify-between gap-3">
-                                <p className="font-medium text-sm leading-tight">
-                                  {address.name}
-                                </p>
-                                <CommonButton
-                                  variant="iconBtn"
-                                  onClick={() => handleEditAddress(address.id)}
-                                >
-                                  <Pencil size={14} />
-                                </CommonButton>
-                              </div>
-                              {/* ADDRESS DETAILS */}
-                              <div className="mt-2 text-sm text-foreground/80 leading-relaxed space-y-0.5">
-                                <p className="break-all">{address.address}</p>
-                                <p>{address.cityZip}</p>
-                                <p>India</p>
-                              </div>
-                              {/* ACTIONS */}
-                              <div className="flex items-center justify-between mt-5">
-                                {address.isDefault ? (
-                                  <span className="px-4 py-1 text-xs rounded-full bg-brand/80 text-background">
-                                    Default
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() =>
-                                      handleSetDefaultAddress(address.id)
-                                    }
-                                    className="px-4 py-1 text-xs rounded-full border border-brand hover:bg-brand/80 hover:text-background transition"
-                                    disabled={setDefaultAddress.isPending}
-                                  >
-                                    {setDefaultAddress.isPending
-                                      ? "Setting..."
-                                      : "Set Default"}
-                                  </button>
-                                )}
-                                <CommonButton
-                                  variant="iconBtn"
-                                  className="border-red-600 hover:bg-red-600 text-red-600 outline-0 ring-0"
-                                  onClick={() => {
-                                    setSelectedAddressId(address.id);
-                                    setOpenDeleteAddress(true);
-                                  }}
-                                >
-                                  <Trash2 size={16} />
-                                </CommonButton>
-                              </div>
-                            </div>
-                          ))
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[600px] overflow-y-auto pr-1">
+                        {addressLoading && (
+                          <div className="col-span-1 md:col-span-2 py-12 flex items-center justify-center">
+                            <Loader2 className="animate-spin text-brand w-8 h-8" />
+                          </div>
                         )}
+
+                        {!addressLoading && backendAddresses.length === 0 && (
+                          <div className="col-span-1 md:col-span-2 text-center py-12">
+                            <p className="text-foreground/60 mb-4">No addresses saved yet.</p>
+                            <button onClick={() => setOpenAddAddress(true)} className="text-brand font-medium hover:underline">Add an address</button>
+                          </div>
+                        )}
+
+                        {!addressLoading &&
+                          backendAddresses.map((backendAddr) => {
+                            const address = backendToDisplayAddress(backendAddr);
+                            return (
+                              <div
+                                key={address.id}
+                                className={`relative border rounded-xl p-5 flex flex-col justify-between transition-all duration-300 group ${address.isDefault
+                                  ? "border-brand bg-brand/[0.02]"
+                                  : "border-foreground/10 hover:border-brand/30 hover:shadow-sm"
+                                  }`}
+                              >
+                                <div>
+                                  <div className="flex items-start justify-between gap-3 mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`p-1.5 rounded-full ${address.isDefault ? "bg-brand/10 text-brand" : "bg-foreground/5 text-foreground/50"}`}>
+                                        <MapPin size={14} />
+                                      </div>
+                                      <p className="font-semibold text-sm">
+                                        {address.name}
+                                      </p>
+                                    </div>
+                                    {address.isDefault && (
+                                      <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full bg-brand/10 text-brand">
+                                        Default
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="text-sm text-foreground/70 leading-relaxed space-y-1 pl-9 mb-4">
+                                    <p className="line-clamp-2">
+                                      {address.address}
+                                    </p>
+                                    <p>{address.cityZip}</p>
+                                    <p>India</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-2 pt-4 border-t border-foreground/5 mt-auto">
+                                  {!address.isDefault && (
+                                    <button
+                                      type="button"
+                                      className="text-xs font-medium text-foreground/60 hover:text-brand transition px-3 py-1.5 rounded-lg hover:bg-foreground/5"
+                                      onClick={() => setDefaultAddress.mutate(address.id)}
+                                      disabled={setDefaultAddress.isPending}
+                                    >
+                                      Set Default
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleEditAddress(address.id)}
+                                    className="p-2 text-foreground/60 hover:text-brand hover:bg-brand/5 rounded-lg transition"
+                                    title="Edit"
+                                  >
+                                    <Pencil size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedAddressId(address.id);
+                                      setOpenDeleteAddress(true);
+                                    }}
+                                    className="p-2 text-foreground/60 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   </TabPanel>
-                  <TabPanel>
-                    <div className="pt-5">
-                      {/* SECTION HEADING */}
-                      <CommonHeading level={2} title="Settings" />
 
-                      {/* CARD */}
-                      <div className="flex flex-col gap-5">
-                        {/* LEFT CONTENT */}
-                        <div className="flex items-start gap-4 max-w-xl">
-                          <div className="h-10 w-10 min-w-10 rounded-full border border-foreground/20 flex items-center justify-center">
-                            <Lock size={18} />
+                  <TabPanel className="focus:outline-none">
+                    <div className="bg-white border border-foreground/10 rounded-2xl p-6 md:p-8 shadow-sm min-h-[500px]">
+                      <h2 className="font-times text-2xl mb-6 pb-4 border-b border-foreground/10">Account Settings</h2>
+
+                      <div className="max-w-2xl">
+                        <div className="p-6 border border-red-100 rounded-xl bg-red-50/30 flex items-start gap-5">
+                          <div className="h-12 w-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                            <Lock size={20} />
                           </div>
-
                           <div>
-                            <p className="font-medium text-2xl font-times mb-1">
+                            <h3 className="font-medium text-lg text-foreground mb-1">
                               Sign out everywhere
+                            </h3>
+                            <p className="text-sm text-foreground/70 mb-5 leading-relaxed">
+                              This will log you out from all devices, including this one. Use this if you have lost a device or suspect unauthorized access.
                             </p>
-                            <p className="text-sm text-foreground/70 leading-relaxed">
-                              If you&apos;ve lost a device or have security
-                              concerns, signing out everywhere will log you out
-                              from all devices to keep your account secure.
-                            </p>
+                            <button
+                              onClick={() => setOpenSignOutConfirm(true)}
+                              className="px-5 py-2.5 bg-white border border-red-200 text-red-600 font-medium rounded-lg text-sm hover:bg-red-50 transition shadow-sm"
+                            >
+                              Sign out active sessions
+                            </button>
                           </div>
-                        </div>
-
-                        <div className="flex flex-col items-center gap-3">
-                          <CommonButton
-                            variant="secondaryBtn"
-                            className="w-fit max-w-fit"
-                            onClick={() => setOpenSignOutConfirm(true)}
-                          >
-                            Sign out everywhere
-                          </CommonButton>
-
-                          <p className="text-xs text-foreground/60 hidden md:block">
-                            You&apos;ll also be signed out on this device.
-                          </p>
                         </div>
                       </div>
-
-                      {/* MOBILE HELPER TEXT */}
-                      <p className="text-xs text-foreground/60 mt-3 md:hidden">
-                        You&apos;ll also be signed out on this device.
-                      </p>
                     </div>
                   </TabPanel>
                 </TabPanels>
-              </TabGroup>
-            </div>
-          </div>
-        </section>
+              </div>
+            </TabGroup>
+          </section>
+        </AnimatedSection>
       </div>
+
       <AddAddressModal
         open={openAddAddress}
         onClose={() => {
@@ -366,6 +501,7 @@ export default function Account() {
         onSave={handleAddressSave}
         isEdit={isEditAddress}
         initialData={editingAddress}
+        isLoading={isSaving}
       />
       <EditProfileModal
         open={openEditProfile}
@@ -374,12 +510,28 @@ export default function Account() {
       <SignOutConfirmModal
         open={openSignOutConfirm}
         onClose={() => setOpenSignOutConfirm(false)}
-        onConfirm={handleSignOut}
+        onConfirm={() => {
+          logout.mutate();
+          setOpenSignOutConfirm(false);
+        }}
       />
       <DeleteAddressConfirmModal
         open={openDeleteAddress}
-        onClose={() => setOpenDeleteAddress(false)}
+        onClose={() => {
+          setOpenDeleteAddress(false);
+          setSelectedAddressId(null);
+        }}
         onConfirm={handleDeleteAddress}
+      />
+      <RateOrderModal
+        open={openRateOrder}
+        onClose={() => {
+          setOpenRateOrder(false);
+          setSelectedOrderId(null);
+        }}
+        order={selectedOrderDetails}
+        mode={rateModalMode}
+        existingReviews={orderReviews}
       />
     </>
   );

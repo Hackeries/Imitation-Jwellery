@@ -1,295 +1,342 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import CommonHeading from "@/app/components/CommonHeading";
-import CommonButton from "@/app/components/button/CommonButton";
-import { useOrderDetails, useCancelOrder } from "@/hooks/use-orders";
-import {
-  Truck,
-  MoreVertical,
-  XCircle,
-  RotateCcw,
-  Headset,
-  Package,
-  CheckCircle,
-  Clock,
-} from "lucide-react";
-import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useOrderDetails, useCancelOrder } from "@/hooks/use-orders";
+import { useQueryClient } from "@tanstack/react-query";
+import { useOrderReviews } from "@/hooks/use-reviews";
+import {
+    ChevronLeft,
+    Loader2,
+    Home,
+    ChevronRight,
+    StarIcon,
+} from "lucide-react";
+
+import OrderStatusCard from "./OrderStatusCard";
+import AddressDetails from "./AddressDetails";
+import PaymentDetails from "./PaymentDetails";
+import TrackingDetailsCard from "./TrackingDetailsCard";
+import CancelOrderModal from "./CancelOrderModal";
+import ReturnOrderModal from "./ReturnOrderModal";
+import CommonButton from "@/app/components/button/CommonButton";
+import RateOrderModal from "../../account/RateOrderModal";
+import AuthGuard from "@/app/components/AuthGuard";
+
+interface UiOrderType {
+    id: string;
+    orderNumber: string;
+    currency: string;
+    total: number;
+    status: string;
+    date: string;
+    updatedDate: string;
+    items: {
+        productId: string;
+        productName: string;
+        thumbnail: string;
+        quantity: number;
+        totalPrice: number;
+    }[];
+    shippingAddress: {
+        fullName: string;
+        line1: string;
+        line2?: string;
+        city: string;
+        state: string;
+        pincode: string;
+        country: string;
+        mobile: string;
+    };
+    financials: {
+        subtotal: number;
+        shipping: number;
+        discount: number;
+        total: number;
+        currency: string;
+    };
+}
 
 export default function OrderDetailsPage() {
-  const params = useParams();
-  const orderId = typeof params.orderId === "string" ? params.orderId : "";
+    const [openRateOrder, setOpenRateOrder] = useState(false);
+    const [rateModalMode, setRateModalMode] = useState<"edit" | "view">("edit");
 
-  const { data: order, isLoading, isError } = useOrderDetails(orderId);
-  const cancelOrderMutation = useCancelOrder();
+    const params = useParams();
+    const router = useRouter();
+    const queryClient = useQueryClient();
+    const orderId = params.orderId as string;
 
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+    const [cancelModalOpen, setCancelModalOpen] = useState(false);
+    const [returnModalOpen, setReturnModalOpen] = useState(false);
 
-  const handleCancelOrder = async () => {
-    try {
-      await cancelOrderMutation.mutateAsync(orderId);
-      toast.success("Order cancelled successfully");
-      setShowCancelConfirm(false);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to cancel order"
-      );
+    const { data: order, isLoading } = useOrderDetails(orderId);
+    const cancelOrderMutation = useCancelOrder();
+
+    const { data: orderReviews = [] } = useOrderReviews(orderId);
+    const hasReviewed = orderReviews.length > 0;
+    const avgRating =
+        orderReviews.length > 0
+            ? orderReviews.reduce((sum, r) => sum + r.rating, 0) / orderReviews.length
+            : 0;
+
+    const handleCancel = (_reason: string, _note: string) => {
+        cancelOrderMutation.mutate(orderId, {
+            onSuccess: () => {
+                toast.success("Order cancelled successfully");
+                setCancelModalOpen(false);
+                queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+                queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+                setTimeout(() => {
+                    router.push("/account?tab=orders");
+                }, 1000);
+            },
+            onError: (err: Error) => {
+                toast.error(err.message || "Failed to cancel");
+            },
+        });
+    };
+
+    const handleReturn = (reason: string) => {
+        toast.info("Return request submitted (Demo)");
+        setReturnModalOpen(false);
+    };
+
+    const handleOpenRateModal = () => {
+        setRateModalMode("edit");
+        setOpenRateOrder(true);
+    };
+
+    const handleViewReviews = () => {
+        setRateModalMode("view");
+        setOpenRateOrder(true);
+    };
+
+    if (isLoading) {
+        return (
+            <div className="min-h-[60vh] flex items-center justify-center">
+                <Loader2 className="animate-spin text-brand" size={40} />
+            </div>
+        );
     }
-  };
 
-  if (isLoading) {
-    return (
-      <section className="px-3 md:px-8 lg:px-10 py-8 md:py-12">
-        <div className="max-w-6xl mx-auto">
-          <p className="text-center text-foreground/60">Loading order details...</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (isError || !order) {
-    return (
-      <section className="px-3 md:px-8 lg:px-10 py-8 md:py-12">
-        <div className="max-w-6xl mx-auto text-center">
-          <CommonHeading level={1} title="Order Not Found" />
-          <p className="text-foreground/60 mb-6">
-            We couldn&apos;t find this order. It may have been removed or the link is incorrect.
-          </p>
-          <CommonButton href="/account">Go to My Orders</CommonButton>
-        </div>
-      </section>
-    );
-  }
-
-  const statusConfig = {
-    Processing: { icon: Clock, color: "text-yellow-600", bg: "bg-yellow-100" },
-    Shipped: { icon: Truck, color: "text-blue-600", bg: "bg-blue-100" },
-    Delivered: { icon: CheckCircle, color: "text-green-600", bg: "bg-green-100" },
-    Cancelled: { icon: XCircle, color: "text-red-600", bg: "bg-red-100" },
-  };
-
-  const StatusIcon = statusConfig[order.status].icon;
-
-  return (
-    <section className="px-3 md:px-8 lg:px-10 py-8 md:py-12">
-      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CommonHeading level={1} title="Order Details" noMargin className="text-left" />
-          <Link href="/account" className="commonLink text-sm">
-            Go to My Orders
-          </Link>
-        </div>
-
-        {/* ORDER INFO BAR */}
-        <div className="bg-foreground/5 rounded-xl p-4 flex flex-wrap gap-4 justify-between items-center">
-          <div>
-            <p className="text-sm text-foreground/60">Order Number</p>
-            <p className="font-medium">{order.orderNumber}</p>
-          </div>
-          <div>
-            <p className="text-sm text-foreground/60">Order Date</p>
-            <p className="font-medium">{order.date}</p>
-          </div>
-          <div>
-            <p className="text-sm text-foreground/60">Total</p>
-            <p className="font-medium">₹{order.total.toFixed(2)}</p>
-          </div>
-          <div>
-            <span
-              className={`px-3 py-1 text-sm rounded-full ${statusConfig[order.status].bg} ${statusConfig[order.status].color}`}
-            >
-              {order.status}
-            </span>
-          </div>
-        </div>
-
-        {/* STATUS CARD */}
-        <div className="bg-background border border-foreground/20 rounded-2xl p-4 md:p-6 space-y-6">
-          <div className="flex flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div
-                className={`h-12 w-12 min-w-12 rounded-full ${statusConfig[order.status].bg} flex items-center justify-center`}
-              >
-                <StatusIcon className={statusConfig[order.status].color} />
-              </div>
-              <div>
-                <p className="font-medium text-base md:text-lg">{order.status} Order</p>
-                {order.expectedDelivery && order.status !== "Delivered" && order.status !== "Cancelled" && (
-                  <p className="text-sm text-foreground/70">
-                    Expected Delivery: <strong>{order.expectedDelivery}</strong>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {order.status !== "Delivered" && order.status !== "Cancelled" && (
-              <Menu as="div" className="relative">
-                <MenuButton
-                  className="h-10 w-10 rounded-full border border-foreground/20 flex items-center justify-center hover:bg-foreground/10 transition"
-                  aria-label="Order actions"
-                >
-                  <MoreVertical size={18} />
-                </MenuButton>
-
-                <MenuItems className="mt-2 w-52 rounded-xl border border-foreground/20 bg-background shadow-lg p-1 z-50 focus:outline-none absolute right-0">
-                  <MenuItem>
-                    {({ active }) => (
-                      <button
-                        onClick={() => setShowCancelConfirm(true)}
-                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-foreground/10" : ""}`}
-                      >
-                        <XCircle size={16} className="text-red-500" />
-                        Cancel Order
-                      </button>
-                    )}
-                  </MenuItem>
-
-                  <MenuItem>
-                    {({ active }) => (
-                      <button
-                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-foreground/10" : ""}`}
-                      >
-                        <RotateCcw size={16} />
-                        Return Order
-                      </button>
-                    )}
-                  </MenuItem>
-
-                  <div className="my-1 h-px bg-foreground/20" />
-
-                  <MenuItem>
-                    {({ active }) => (
-                      <Link
-                        href="/contact-info"
-                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-foreground/10" : ""}`}
-                      >
-                        <Headset size={16} />
-                        Support & Help
-                      </Link>
-                    )}
-                  </MenuItem>
-                </MenuItems>
-              </Menu>
-            )}
-          </div>
-
-          {/* ORDER ITEMS */}
-          <div className="space-y-4">
-            <p className="font-medium">Items ({order.items.length})</p>
-            {order.items.map((item, index) => (
-              <div
-                key={`${item.productId}-${index}`}
-                className="flex gap-4 p-3 border border-foreground/10 rounded-xl"
-              >
-                <div className="relative w-16 h-16 bg-foreground/5 rounded-lg overflow-hidden">
-                  <Image
-                    src={item.thumbnail}
-                    alt={item.productName}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{item.productName}</p>
-                  <p className="text-sm text-foreground/60">
-                    Qty: {item.quantity} × ₹{item.unitPrice.toFixed(2)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">₹{item.totalPrice.toFixed(2)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ADDRESS + PAYMENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* SHIPPING ADDRESS */}
-          <div className="lg:col-span-2 border border-foreground/20 rounded-2xl p-4 md:p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Package size={20} />
-              <p className="font-medium">Shipping Address</p>
-            </div>
-            {order.shippingAddress ? (
-              <div className="text-sm text-foreground/80 space-y-1">
-                <p className="font-medium text-foreground">{order.shippingAddress.fullName}</p>
-                <p>{order.shippingAddress.line1}</p>
-                {order.shippingAddress.line2 && <p>{order.shippingAddress.line2}</p>}
-                <p>
-                  {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
-                  {order.shippingAddress.pincode}
+    if (!order) {
+        return (
+            <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4">
+                <h2 className="text-xl font-medium">Order not found</h2>
+                <p className="text-foreground/60">
+                    We couldn&apos;t locate the details for this order.
                 </p>
-                <p>{order.shippingAddress.country}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-foreground/60">No shipping address available</p>
-            )}
-          </div>
+                <Link
+                    href="/account"
+                    className="text-brand underline hover:text-brand/80 transition"
+                >
+                    Back to Orders
+                </Link>
+            </div>
+        );
+    }
+    const defaultAddress = {
+        fullName: "N/A",
+        line1: "N/A",
+        city: "N/A",
+        state: "N/A",
+        pincode: "N/A",
+        country: "N/A",
+        mobile: "N/A",
+    };
 
-          {/* PAYMENT DETAILS */}
-          <div className="border border-foreground/20 rounded-2xl p-4 md:p-6">
-            <p className="font-medium mb-4">Payment Summary</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>₹{order.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Shipping</span>
-                <span>{order.shipping === 0 ? "FREE" : `₹${order.shipping.toFixed(2)}`}</span>
-              </div>
-              {order.discount > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Discount</span>
-                  <span>-₹{order.discount.toFixed(2)}</span>
+    const uiOrder: UiOrderType = {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        currency: order.currency,
+        total: order.total,
+        status: order.status.toLowerCase(),
+        date: order.date,
+        updatedDate: order.date,
+        items: order.items.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            thumbnail: item.thumbnail,
+            quantity: item.quantity,
+            totalPrice: item.totalPrice,
+        })),
+        shippingAddress: order.shippingAddress ?? defaultAddress,
+        financials: {
+            subtotal: order.subtotal,
+            shipping: order.shipping,
+            discount: order.discount,
+            total: order.total,
+            currency: order.currency,
+        },
+    };
+
+    return (
+        <section className="bg-background min-h-screen pb-20">
+            <div className="max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+                {/* --- PROFESSIONAL HEADER SECTION --- */}
+                <div className="flex flex-col gap-4 sm:gap-6 mb-6 sm:mb-10 border-b border-foreground/10 pb-4 sm:pb-6">
+                    {/* Breadcrumbs & Back Link */}
+                    <div className="flex flex-col-reverse md:flex-row md:items-center justify-between gap-4">
+                        <nav className="flex items-center gap-2 text-sm text-foreground/60">
+                            <Link
+                                href="/"
+                                className="hover:text-brand flex items-center gap-1 transition-colors"
+                            >
+                                <Home size={14} /> Home
+                            </Link>
+                            <ChevronRight size={14} />
+                            <Link
+                                href="/account"
+                                className="hover:text-brand transition-colors"
+                            >
+                                My Account
+                            </Link>
+                            <ChevronRight size={14} />
+                            <span className="text-foreground font-medium">
+                                Order #{order.orderNumber}
+                            </span>
+                        </nav>
+
+                        <Link
+                            href="/account?tab=orders"
+                            className="flex items-center gap-2 text-sm font-medium text-foreground/70 hover:text-brand transition-all group w-fit"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-foreground/5 flex items-center justify-center group-hover:bg-brand/10 transition-colors">
+                                <ChevronLeft size={16} />
+                            </div>
+                            Back to Orders
+                        </Link>
+                    </div>
+
+                    {/* Title & Meta Data */}
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div>
+                            <h1 className="font-times text-2xl sm:text-3xl md:text-4xl text-foreground mb-2">
+                                Order #{order.orderNumber}
+                            </h1>
+                            <div className="flex items-center gap-3 text-sm text-foreground/70">
+                                <span className="bg-foreground/5 px-3 py-1 rounded-full border border-foreground/10">
+                                    Placed on {order.date}
+                                </span>
+                                <span className="hidden md:inline text-foreground/30">|</span>
+                                <span className="hidden md:inline">
+                                    Total Items: {order.items.length}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-              )}
-              <div className="border-t pt-2 flex justify-between font-medium">
-                <span>Total</span>
-                <span>₹{order.total.toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-sm text-foreground/60">Payment Method</p>
-              <p className="font-medium">{order.paymentMethod}</p>
-            </div>
-          </div>
-        </div>
 
-        {/* CANCEL CONFIRMATION MODAL */}
-        {showCancelConfirm && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-background rounded-2xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-medium mb-4">Cancel Order?</h3>
-              <p className="text-sm text-foreground/70 mb-6">
-                Are you sure you want to cancel this order? This action cannot be undone.
-              </p>
-              <div className="flex gap-3">
-                <CommonButton
-                  variant="secondaryBtn"
-                  onClick={() => setShowCancelConfirm(false)}
-                  className="flex-1"
-                >
-                  Keep Order
-                </CommonButton>
-                <CommonButton
-                  onClick={handleCancelOrder}
-                  disabled={cancelOrderMutation.isPending}
-                  className="flex-1 bg-red-600 hover:bg-red-700"
-                >
-                  {cancelOrderMutation.isPending ? "Cancelling..." : "Cancel Order"}
-                </CommonButton>
-              </div>
+                {/* --- MAIN CONTENT GRID --- */}
+                <div className="space-y-6 sm:space-y-8">
+                    <OrderStatusCard
+                        order={uiOrder}
+                        onCancel={() => setCancelModalOpen(true)}
+                        onReturn={() => setReturnModalOpen(true)}
+                    />
+
+                    {order && ["confirmed", "shipped", "out for delivery"].includes(uiOrder.status) && (
+                        <TrackingDetailsCard order={order} />
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+                        {uiOrder.status === "delivered" && (
+                            <div className="lg:col-span-12">
+                                {hasReviewed ? (
+                                    <div className="border border-foreground/20 rounded-xl p-4 sm:p-5 md:p-6 bg-background/50">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <div>
+                                                <p className="font-medium text-sm sm:text-base">
+                                                    You rated this order
+                                                </p>
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <StarIcon
+                                                            key={star}
+                                                            className={`size-5 ${star <= Math.round(avgRating)
+                                                                ? "text-amber-500 fill-amber-500"
+                                                                : "text-gray-300"
+                                                                }`}
+                                                        />
+                                                    ))}
+                                                    <span className="ml-2 text-sm text-foreground/70">
+                                                        {avgRating.toFixed(1)} / 5
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-foreground/60 mt-1">
+                                                    Thanks for sharing your feedback
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={handleViewReviews}
+                                                className="text-sm text-brand hover:underline font-medium w-fit"
+                                            >
+                                                View rating
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="border border-foreground/20 rounded-xl p-4 sm:p-5 md:p-6 bg-background/50">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 min-w-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                                                    <StarIcon className="text-amber-500 fill-amber-500 size-5" />
+                                                </div>
+                                                <p className="font-medium text-sm sm:text-base">
+                                                    How were your ordered items?
+                                                </p>
+                                            </div>
+                                            <CommonButton
+                                                className="w-full sm:w-auto sm:max-w-fit"
+                                                onClick={handleOpenRateModal}
+                                            >
+                                                Rate now
+                                            </CommonButton>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {/* Address Column */}
+                        <div className="lg:col-span-8 flex flex-col gap-8">
+                            <AddressDetails
+                                shippingAddress={order.shippingAddress}
+                                billingAddress={undefined}
+                            />
+                        </div>
+
+                        {/* Payment/Summary Column (Sticky) */}
+                        <div className="lg:col-span-4">
+                            <PaymentDetails order={uiOrder} />
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
+
+            {/* --- MODALS --- */}
+            <CancelOrderModal
+                open={cancelModalOpen}
+                onClose={() => setCancelModalOpen(false)}
+                onConfirm={handleCancel}
+                isLoading={cancelOrderMutation.isPending}
+            />
+
+            <ReturnOrderModal
+                open={returnModalOpen}
+                onClose={() => setReturnModalOpen(false)}
+                onConfirm={handleReturn}
+                isLoading={false}
+            />
+            <RateOrderModal
+                open={openRateOrder}
+                onClose={() => setOpenRateOrder(false)}
+                order={order}
+                mode={rateModalMode}
+                existingReviews={orderReviews}
+            />
+        </section>
+    );
 }

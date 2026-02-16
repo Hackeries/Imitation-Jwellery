@@ -1,318 +1,181 @@
 import { getDeviceId, getLocal, setLocal } from "@/lib/device-storage";
+import { getCommonHeaders } from "@/lib/api-utils";
+import { API_BASE_URL, FALLBACK_IMAGE } from "@/constants";
+import { Cart, BackendCartResponse } from "@/types/index";
+import { handleFetchError, NetworkError } from "@/lib/error-handler";
 
-export interface CartItem {
-  id: string;
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-}
+const transformCart = (data: unknown): Cart | null => {
+  if (!data || typeof data !== "object") return null;
 
-export interface Cart {
-  items: CartItem[];
-  total: number;
-}
+  const cartData =
+    (data as { cart?: BackendCartResponse }).cart ||
+    (data as BackendCartResponse);
 
-interface BackendCartItem {
-  _id: string;
-  productId:
-    | string
-    | {
-        _id: string;
-        name: string;
-        price: number;
-        thumbnail?: string;
-        images?: string[];
-      };
-  thumbnail?: string;
-  qty: number;
-  unitPrice: number;
-}
-
-interface BackendCart {
-  _id: string;
-  deviceId: string;
-  items: BackendCartItem[];
-  subtotalAmount: number;
-  shippingAmount: number;
-  discountAmount: number;
-  totalAmount: number;
-  status: string;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
-
-const localStorageKey = () => `cart:${getDeviceId()}`;
-
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
-};
-
-const transformBackendCart = (backendCart: BackendCart | null): Cart => {
-  if (!backendCart || !backendCart.items) {
-    return { items: [], total: 0 };
-  }
-
-  const items: CartItem[] = backendCart.items.map((item) => {
-    const product =
-      typeof item.productId === "object" ? item.productId : null;
-
-    return {
-      id: item._id,
-      productId: product ? product._id : String(item.productId),
-      name: product?.name || "Product",
-      price: item.unitPrice,
-      quantity: item.qty,
-      image:
-        item.thumbnail ||
-        product?.thumbnail ||
-        product?.images?.[0] ||
-        "/img/placeholder.webp",
-    };
-  });
+  if (!cartData || !Array.isArray(cartData.items)) return null;
 
   return {
-    items,
-    total: backendCart.totalAmount || 0,
+    _id: cartData._id,
+    status: cartData.status,
+    subtotalAmount: cartData.subtotalAmount || 0,
+    discountAmount: cartData.discountAmount || 0,
+    shippingAmount: cartData.shippingAmount || 0,
+    totalAmount: cartData.totalAmount || 0,
+    id: cartData._id,
+    total: cartData.totalAmount || 0,
+    items: cartData.items.map((item) => {
+      const product =
+        typeof item.productId === "object" ? item.productId : null;
+      const pid = product?._id || (item.productId as string);
+
+      return {
+        _id: item._id,
+        id: item._id,
+        productId: pid,
+        name: product?.name || item.name || "Product",
+        image: product?.thumbnail || item.image || FALLBACK_IMAGE,
+        price: item.price ?? item.unitPrice ?? 0,
+        unitPrice: item.unitPrice ?? item.price ?? 0,
+        qty: item.qty ?? item.quantity ?? 1,
+        quantity: item.qty ?? item.quantity ?? 1,
+        packId: item.packId,
+      };
+    }),
   };
 };
 
-const getLocalCart = (): Cart => {
-  return getLocal<Cart>(localStorageKey(), { items: [], total: 0 });
-};
-
-const setLocalCart = (cart: Cart): void => {
-  setLocal(localStorageKey(), cart);
-};
-
-const calculateTotal = (items: CartItem[]) =>
-  items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-// Fetch cart from backend, fallback to local storage
-export const fetchCart = async (): Promise<Cart> => {
+export const fetchCart = async (): Promise<Cart | null> => {
   const deviceId = getDeviceId();
-  if (!deviceId || deviceId === "server") {
-    return getLocalCart();
-  }
+  const url = `${API_BASE_URL}/api/v1/cart/device`;
 
   try {
-    const url = `${API_BASE_URL}/api/v1/cart/${deviceId}`;
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: buildHeaders(),
-    });
-
-    if (!response.ok) {
-      return getLocalCart();
+    const data = await handleFetchError<{ data: BackendCartResponse }>(
+      () =>
+        fetch(url, {
+          headers: {
+            ...getCommonHeaders(),
+            "X-Device-Id": deviceId || "",
+          },
+          credentials: "include",
+          cache: "no-store",
+        }),
+      "Failed to fetch cart",
+    );
+    return transformCart(data?.data);
+  } catch (error) {
+    if (error instanceof NetworkError) {
+      console.error("Network error fetching cart:", error.message);
+      throw error;
     }
-
-    const data = await response.json();
-    const backendCart: BackendCart | null =
-      data?.data?.cart ?? data?.cart ?? null;
-
-    if (!backendCart) {
-      return getLocalCart();
-    }
-
-    const cart = transformBackendCart(backendCart);
-    setLocalCart(cart);
-    return cart;
-  } catch {
-    return getLocalCart();
+    console.error("Fetch cart error:", error);
+    return null;
   }
 };
 
-// Add item to cart via backend
 export const addToCart = async (
   productId: string,
-  name: string,
-  price: number,
-  image: string,
-  quantity = 1
-): Promise<Cart> => {
+  quantity: number,
+): Promise<Cart | null> => {
   const deviceId = getDeviceId();
-
-  if (!deviceId || deviceId === "server") {
-    const cart = getLocalCart();
-    const existing = cart.items.find((i) => i.productId === productId);
-
-    const items = existing
-      ? cart.items.map((i) =>
-          i.productId === productId
-            ? { ...i, quantity: i.quantity + quantity }
-            : i
-        )
-      : [
-          ...cart.items,
-          { id: productId, productId, name, price, quantity, image },
-        ];
-
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
-  }
+  const url = `${API_BASE_URL}/api/v1/cart/items`;
 
   try {
-    const url = `${API_BASE_URL}/api/v1/cart/items`;
+    const data = await handleFetchError<{ data: BackendCartResponse }>(
+      () =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            ...getCommonHeaders(),
+            "X-Device-Id": deviceId || "",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            productId,
+            qty: quantity,
+          }),
+        }),
+      "Failed to add to cart",
+    );
+    return transformCart(data?.data);
+  } catch (error) {
+    if (error instanceof NetworkError) {
+      console.error("Network error adding to cart:", error.message);
+    }
+    throw error;
+  }
+};
+
+export const removeFromCart = async (
+  productId: string,
+): Promise<Cart | null> => {
+  const deviceId = getDeviceId();
+  const url = `${API_BASE_URL}/api/v1/cart/items/${productId}`;
+
+  try {
     const response = await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(),
+      method: "DELETE",
+      headers: {
+        ...getCommonHeaders(),
+        "X-Device-Id": deviceId || "",
+      },
       credentials: "include",
-      body: JSON.stringify({ deviceId, productId, qty: quantity }),
     });
+    if (!response.ok && response.status === 0) {
+      throw new NetworkError(
+        "Cannot connect to the server. Please check your internet connection.",
+        undefined,
+        true,
+      );
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
 
     if (!response.ok) {
-      throw new Error("Failed to add item to cart");
+      throw new NetworkError(
+        "Failed to remove from cart",
+        response.status,
+      );
     }
 
     const data = await response.json();
-    const backendCart: BackendCart | null =
-      data?.data?.cart ?? data?.cart ?? null;
-    const cart = transformBackendCart(backendCart);
-    setLocalCart(cart);
-    return cart;
-  } catch {
-    // Fallback to local storage
-    const cart = getLocalCart();
-    const existing = cart.items.find((i) => i.productId === productId);
-
-    const items = existing
-      ? cart.items.map((i) =>
-          i.productId === productId
-            ? { ...i, quantity: i.quantity + quantity }
-            : i
-        )
-      : [
-          ...cart.items,
-          { id: productId, productId, name, price, quantity, image },
-        ];
-
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
-  }
-};
-
-// Remove item from cart
-export const removeFromCart = async (cartItemId: string): Promise<Cart> => {
-  const deviceId = getDeviceId();
-
-  if (!deviceId || deviceId === "server") {
-    const cart = getLocalCart();
-    const items = cart.items.filter(
-      (i) => i.id !== cartItemId && i.productId !== cartItemId
-    );
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
-  }
-
-  try {
-    const url = `${API_BASE_URL}/api/v1/cart/items/${cartItemId}?deviceId=${deviceId}`;
-    const response = await fetch(url, {
-      method: "DELETE",
-      headers: buildHeaders(),
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to remove item from cart");
+    return transformCart(data?.data);
+  } catch (error) {
+    if (error instanceof NetworkError) {
+      console.error("Network error removing from cart:", error.message);
     }
+    throw error;
+  }
+};
 
-    return await fetchCart();
-  } catch {
-    const cart = getLocalCart();
-    const items = cart.items.filter(
-      (i) => i.id !== cartItemId && i.productId !== cartItemId
+export const updateCartItemQuantity = async (
+  productId: string,
+  quantity: number,
+): Promise<Cart | null> => {
+  const deviceId = getDeviceId();
+  const url = `${API_BASE_URL}/api/v1/cart/items/${productId}`;
+
+  try {
+    const data = await handleFetchError<{ data: BackendCartResponse }>(
+      () =>
+        fetch(url, {
+          method: "PUT",
+          headers: {
+            ...getCommonHeaders(),
+            "X-Device-Id": deviceId || "",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            qty: quantity,
+          }),
+        }),
+      "Failed to update cart quantity",
     );
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
-  }
-};
-
-// Update cart item quantity
-export const updateCartQuantity = async (
-  cartItemId: string,
-  quantity: number
-): Promise<Cart> => {
-  const deviceId = getDeviceId();
-
-  if (!deviceId || deviceId === "server") {
-    const cart = getLocalCart();
-    const items =
-      quantity <= 0
-        ? cart.items.filter((i) => i.id !== cartItemId)
-        : cart.items.map((i) =>
-            i.id === cartItemId ? { ...i, quantity } : i
-          );
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
-  }
-
-  try {
-    const url = `${API_BASE_URL}/api/v1/cart/items/${cartItemId}`;
-    const response = await fetch(url, {
-      method: "PUT",
-      headers: buildHeaders(),
-      credentials: "include",
-      body: JSON.stringify({ deviceId, qty: quantity }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to update cart item");
+    return transformCart(data?.data);
+  } catch (error) {
+    if (error instanceof NetworkError) {
+      console.error("Network error updating cart:", error.message);
     }
-
-    const data = await response.json();
-    const backendCart: BackendCart | null =
-      data?.data?.cart ?? data?.cart ?? null;
-    const cart = transformBackendCart(backendCart);
-    setLocalCart(cart);
-    return cart;
-  } catch {
-    const cart = getLocalCart();
-    const items =
-      quantity <= 0
-        ? cart.items.filter((i) => i.id !== cartItemId)
-        : cart.items.map((i) =>
-            i.id === cartItemId ? { ...i, quantity } : i
-          );
-    const newCart = { items, total: calculateTotal(items) };
-    setLocalCart(newCart);
-    return newCart;
+    throw error;
   }
-};
-
-// Clear cart
-export const clearCart = async (): Promise<Cart> => {
-  const deviceId = getDeviceId();
-  const emptyCart: Cart = { items: [], total: 0 };
-
-  setLocalCart(emptyCart);
-
-  if (!deviceId || deviceId === "server") {
-    return emptyCart;
-  }
-
-  try {
-    const url = `${API_BASE_URL}/api/v1/cart?deviceId=${deviceId}`;
-    await fetch(url, {
-      method: "DELETE",
-      headers: buildHeaders(),
-      credentials: "include",
-    });
-  } catch {
-    // Ignore backend errors for clear
-  }
-
-  return emptyCart;
 };

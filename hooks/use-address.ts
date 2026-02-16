@@ -1,37 +1,40 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  fetchAddresses,
   addAddress,
   updateAddress,
   deleteAddress,
   setDefaultAddress,
-  fetchAddresses,
-  Address,
+  type AddressFormData,
 } from "@/services/address-service";
+import { toast } from "sonner";
 
-// Add new address
+export const useAddresses = () => {
+  return useQuery({
+    queryKey: ["addresses"],
+    queryFn: fetchAddresses,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    throwOnError: false,
+  });
+};
+
 export const useAddAddress = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (
-      addressData: Omit<
-        Address,
-        "_id" | "customerId" | "createdAt" | "updatedAt"
-      >
-    ) => addAddress(addressData),
+    mutationFn: (data: AddressFormData) => addAddress(data),
     onSuccess: () => {
-      // Invalidate queries to trigger refetch for address list and (if used for user profile)
       queryClient.invalidateQueries({ queryKey: ["addresses"] });
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      toast.success("Address added successfully");
     },
-    onError: (error: unknown) => {
-      // Optionally show error
-      // toast.error(error instanceof Error ? error.message : "Failed to add address");
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to add address");
     },
   });
 };
 
-// Update existing address
 export const useUpdateAddress = () => {
   const queryClient = useQueryClient();
 
@@ -41,21 +44,18 @@ export const useUpdateAddress = () => {
       addressData,
     }: {
       addressId: string;
-      addressData: Partial<
-        Omit<Address, "_id" | "customerId" | "createdAt" | "updatedAt">
-      >;
+      addressData: Partial<AddressFormData>;
     }) => updateAddress(addressId, addressData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["addresses"] });
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      toast.success("Address updated successfully");
     },
-    onError: (error: unknown) => {
-      // Optionally show error
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update address");
     },
   });
 };
 
-// Delete address
 export const useDeleteAddress = () => {
   const queryClient = useQueryClient();
 
@@ -63,15 +63,14 @@ export const useDeleteAddress = () => {
     mutationFn: (addressId: string) => deleteAddress(addressId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["addresses"] });
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      toast.success("Address deleted successfully");
     },
-    onError: (error: unknown) => {
-      // Optionally show error
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to delete address");
     },
   });
 };
 
-// Mark address as default
 export const useSetDefaultAddress = () => {
   const queryClient = useQueryClient();
 
@@ -79,20 +78,10 @@ export const useSetDefaultAddress = () => {
     mutationFn: (addressId: string) => setDefaultAddress(addressId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["addresses"] });
-      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      toast.success("Default address updated");
     },
-    onError: (error: unknown) => {
-      // Optionally show error
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to set default address");
     },
-  });
-};
-
-// If needed: List addresses (for query list pattern)
-import { useQuery } from "@tanstack/react-query";
-
-export const useAddresses = () => {
-  return useQuery({
-    queryKey: ["addresses"],
-    queryFn: fetchAddresses,
   });
 };

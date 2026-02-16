@@ -1,15 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchProductDetail } from "@/services/product-details-service";
-
-// fetch single product details
-export const useProductDetail = (productId?: string) => {
-  return useQuery({
-    queryKey: ["products", "detail", productId],
-
-    queryFn: () => fetchProductDetail(productId as string),
-
-    enabled: !!productId && productId !== "undefined",
-
-    staleTime: 1000 * 60 * 10,
+import { fetchProductById } from "@/services/product-service";
+import { Product } from "@/types/index";
+export const useProductDetail = (productId: string) => {
+  return useQuery<Product | null, Error>({
+    queryKey: ["product", productId],
+    queryFn: () => fetchProductById(productId),
+    enabled: Boolean(productId),
+    staleTime: 1000 * 60 * 5,
+    retry: 2,
+    throwOnError: false,
   });
 };

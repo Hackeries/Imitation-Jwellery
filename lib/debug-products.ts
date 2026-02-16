@@ -16,11 +16,11 @@ export const debugProductFetching = {
     console.log("[DEBUG] Checking category cache...");
     const testSlugs = [
       "pendant",
-      "necklace",
+      "Pendant",
       "earring",
       "bracelet",
-      "jewelry-set",
-      "ring",
+      "earring-set",
+      "earring",
     ];
 
     for (const slug of testSlugs) {

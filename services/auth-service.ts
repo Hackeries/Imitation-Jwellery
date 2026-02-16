@@ -1,4 +1,5 @@
 import { getDeviceId } from "@/lib/device-storage";
+import { getCommonHeaders } from "@/lib/api-utils";
 
 export interface User {
   _id: string;
@@ -7,160 +8,211 @@ export interface User {
   mobile: string;
 }
 
-export interface LoginCredentials {
-  mobile: string;
-  otp: string;
+export interface Device {
+  _id: string;
+  deviceId: string;
+  customerId?: string;
+  deviceType: string;
+  lastSeenAt: string;
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
 
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
+const hashString = async (str: string): Promise<string> => {
+  if (typeof window === "undefined") return str;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
-// --- PROFILE: get current user ---
-export const fetchUserProfile = async (): Promise<User | null> => {
-  const url = `${API_BASE_URL}/api/v1/customers/me`;
+const getBrowserFingerprint = (): string => {
+  if (typeof window === "undefined") return "server";
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.textBaseline = "top";
+    ctx.font = "14px Arial";
+    ctx.fillText("fingerprint", 2, 2);
+  }
+  return canvas.toDataURL().slice(-50);
+};
 
+export const registerDevice = async (): Promise<{
+  device: Device;
+  customer: User | null;
+}> => {
   try {
-    const response = await fetch(url, {
+    let deviceId =
+      typeof window !== "undefined"
+        ? localStorage.getItem("privora_device_id") ||
+          localStorage.getItem("deviceId")
+        : null;
+
+    if (!deviceId) {
+      deviceId = getDeviceId();
+      if (!deviceId || deviceId === "server") {
+        if (typeof crypto !== "undefined" && crypto.randomUUID) {
+          deviceId = crypto.randomUUID();
+        } else {
+          deviceId =
+            "dev-" + Date.now() + "-" + Math.random().toString(36).substring(2);
+        }
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem("privora_device_id", deviceId);
+        localStorage.setItem("deviceId", deviceId);
+      }
+    }
+
+    const headers = getCommonHeaders();
+    headers["X-Device-Id"] = deviceId;
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/devices`, {
+      method: "POST",
+      headers: headers,
       credentials: "include",
-      headers: buildHeaders(),
+      body: JSON.stringify({
+        deviceId,
+        userAgentHash: await hashString(navigator.userAgent),
+        browserFingerprint: getBrowserFingerprint(),
+        deviceType: "desktop",
+      }),
+    });
+
+    if (!response.ok) {
+      return {
+        device: {
+          _id: "local",
+          deviceId,
+          deviceType: "desktop",
+          lastSeenAt: new Date().toISOString(),
+        },
+        customer: null,
+      };
+    }
+
+    const data = await response.json();
+    return {
+      device: data?.data?.device ?? data?.device,
+      customer: data?.data?.customer ?? data?.customer ?? null,
+    };
+  } catch (error) {
+    return {
+      device: {
+        _id: "fallback",
+        deviceId: "fallback",
+        deviceType: "unknown",
+        lastSeenAt: new Date().toISOString(),
+      },
+      customer: null,
+    };
+  }
+};
+
+export const fetchUserProfile = async (): Promise<User | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/customer/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: getCommonHeaders(),
     });
 
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) return null;
 
     const responseData = await response.json();
-    const customer: User | undefined =
-      responseData?.data?.customer ?? responseData?.data ?? undefined;
-    if (!customer || !customer._id) return null;
+    const customer = responseData?.data?.customer ?? responseData?.data;
 
-    return {
-      _id: customer._id,
-      fullName: customer.fullName,
-      email: customer.email,
-      mobile: customer.mobile,
-    };
+    if (customer && typeof window !== "undefined") {
+      localStorage.setItem("authenticatedUser", JSON.stringify(customer));
+    }
+
+    return customer;
   } catch {
     return null;
   }
 };
 
-// --- REQUEST OTP ---
-export const requestOtp = async (mobile: string): Promise<{ success: boolean; message: string }> => {
-  const url = `${API_BASE_URL}/api/v1/customers/request-otp`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: buildHeaders(),
-    credentials: "include",
-    body: JSON.stringify({ mobile }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.message || "Failed to send OTP");
+export const logoutUser = async (): Promise<void> => {
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/customer/logout`, {
+      method: "POST",
+      headers: getCommonHeaders(),
+      credentials: "include",
+    });
+  } catch (error) {
+    console.error("Logout error", error);
+  } finally {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("authenticatedUser");
+    }
   }
-
-  return { success: true, message: data?.message || "OTP sent successfully" };
 };
 
-// --- VERIFY OTP / LOGIN ---
-export const verifyOtp = async (
-  mobile: string,
-  otp: string
-): Promise<{ user: User; token?: string }> => {
-  const url = `${API_BASE_URL}/api/v1/customers/verify-otp`;
-
-  const response = await fetch(url, {
+export const verifyOtp = async (mobile: string, otp: string) => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/customer/verify-otp`, {
     method: "POST",
-    headers: buildHeaders(),
+    headers: getCommonHeaders(),
     credentials: "include",
     body: JSON.stringify({ mobile, otp }),
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data?.message || "OTP verification failed");
+    throw new Error(data?.message || "Invalid or expired OTP");
   }
 
-  const token = data?.data?.token || data?.token;
-  if (token && typeof window !== "undefined") {
-    localStorage.setItem("authToken", token);
-  }
+  const customer = data?.data?.customer ?? data?.customer;
+  const token = data?.data?.token ?? data?.token;
 
-  const user = await fetchUserProfile();
-  if (!user) {
-    throw new Error("Login succeeded but failed to fetch user profile");
-  }
-
-  return { user, token };
-};
-
-// --- LEGACY LOGIN (for backward compatibility) ---
-export const loginUser = async (
-  credentials: LoginCredentials
-): Promise<{ user: User; token: string }> => {
-  const result = await verifyOtp(credentials.mobile, credentials.otp);
-  return { user: result.user, token: result.token || "" };
-};
-
-// --- LOGOUT ---
-export const logoutUser = async (): Promise<void> => {
-  const url = `${API_BASE_URL}/api/v1/customers/logout`;
-
-  try {
-    await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(),
-      credentials: "include",
-    });
-  } catch {
-    // Ignore logout API errors
-  }
+  if (!customer?._id) throw new Error("Login failed");
 
   if (typeof window !== "undefined") {
-    localStorage.removeItem("authToken");
+    localStorage.setItem("authenticatedUser", JSON.stringify(customer));
+    if (token) {
+      localStorage.setItem("token", token);
+      localStorage.setItem("authToken", token);
+    }
   }
+
+  return { user: customer, token };
 };
 
-// --- PROFILE UPDATE ---
-export const updateUserProfile = async (
-  payload: Partial<{ fullName: string; email: string; mobile: string }>
-): Promise<User> => {
-  const url = `${API_BASE_URL}/api/v1/customers/me`;
-
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: buildHeaders(),
+export const requestOtp = async (mobile: string) => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/customer/send-otp`, {
+    method: "POST",
+    headers: getCommonHeaders(),
     credentials: "include",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ mobile }),
   });
-
-  if (response.status === 401) {
-    throw new Error("Please sign in to update your profile");
-  }
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data?.message || `Failed to update profile: ${response.status}`);
-  }
-
-  const user = await fetchUserProfile();
-  if (!user) {
-    throw new Error("Profile updated, but failed to fetch new profile");
-  }
-
-  return user;
+  const data = await response.json();
+  if (!response.ok) return { success: false, message: data?.message };
+  const otp = data?.data?.OTP || data?.data?.otp;
+  return { success: true, message: "OTP sent", otp };
 };
+
+export const updateUserProfile = async (payload: Partial<User>) => {
+  // Only send fields that are allowed by the backend schema
+  const allowedFields = {
+    ...(payload.fullName !== undefined && { fullName: payload.fullName }),
+    ...(payload.email !== undefined && { email: payload.email }),
+    // Note: mobile cannot be updated after registration
+  };
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/customer/me`, {
+    method: "PUT",
+    headers: getCommonHeaders(),
+    body: JSON.stringify(allowedFields),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message);
+  return data.data.customer;
+};
+
+export const loginUser = async (creds: { mobile: string; otp: string }) =>
+  verifyOtp(creds.mobile, creds.otp);

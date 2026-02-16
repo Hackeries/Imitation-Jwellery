@@ -2,7 +2,7 @@
 
 import { Dialog, Transition } from "@headlessui/react";
 import { Fragment, useState } from "react";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import CommonButton from "@/app/components/button/CommonButton";
 
 const RETURN_REASONS = [
@@ -13,19 +13,29 @@ const RETURN_REASONS = [
   "Other",
 ];
 
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+  isLoading: boolean;
+};
+
 export default function ReturnOrderModal({
   open,
   onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+  onConfirm,
+  isLoading,
+}: Props) {
   const [reason, setReason] = useState("");
+
+  const handleSubmit = () => {
+    if (!reason) return;
+    onConfirm(reason);
+  };
 
   return (
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
-        {/* BACKDROP */}
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -38,7 +48,6 @@ export default function ReturnOrderModal({
           <div className="fixed inset-0 bg-black/40" />
         </Transition.Child>
 
-        {/* MODAL */}
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center px-4 py-10">
             <Transition.Child
@@ -51,14 +60,14 @@ export default function ReturnOrderModal({
               leaveTo="opacity-0 scale-95"
             >
               <Dialog.Panel className="w-full max-w-md rounded-2xl bg-background p-6">
-                
-                {/* HEADER */}
                 <div className="flex items-center justify-between mb-4">
                   <Dialog.Title className="text-lg font-medium">
                     Return Order
                   </Dialog.Title>
                   <button
                     onClick={onClose}
+                    disabled={isLoading}
+                    aria-label="Close return modal"
                     className="p-2 rounded-full hover:bg-foreground/10"
                   >
                     <X size={18} />
@@ -69,7 +78,6 @@ export default function ReturnOrderModal({
                   Please select a reason for returning this order.
                 </p>
 
-                {/* REASONS */}
                 <div className="space-y-3 mb-6">
                   {RETURN_REASONS.map((item) => (
                     <label
@@ -89,24 +97,29 @@ export default function ReturnOrderModal({
                   ))}
                 </div>
 
-                {/* ACTIONS */}
                 <div className="flex justify-end gap-3">
                   <CommonButton
                     variant="secondaryBtn"
                     onClick={onClose}
-                    className="max-w-fit">
+                    disabled={isLoading}
+                    className="max-w-fit"
+                  >
                     Cancel
                   </CommonButton>
 
                   <CommonButton
-                    disabled={!reason}
-                    onClick={() => {
-                      onClose();
-                      // API call later
-                    }}
+                    disabled={!reason || isLoading}
+                    onClick={handleSubmit}
                     className="max-w-fit"
                   >
-                    Submit Return
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      "Submit Return"
+                    )}
                   </CommonButton>
                 </div>
               </Dialog.Panel>

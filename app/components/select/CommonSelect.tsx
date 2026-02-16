@@ -49,16 +49,16 @@ const CommonSelect: React.FC<CommonSelectProps> = ({
       <Listbox value={value} onChange={onChange} disabled={disabled}>
         <div className="relative">
           {/* Button */}
-          <Listbox.Button
-            className={`
-              relative w-full cursor-pointer rounded-md border border-foreground/20
-              bg-transparent px-1.5 md:px-4 py-1.5 md:py-3 text-sm text-left
-              outline-none transition
-              focus:border-primary focus:ring-1 focus:ring-primary
-              disabled:bg-foreground/10 disabled:cursor-not-allowed
-              ${className}
-            `}
-          >
+           <Listbox.Button
+             className={`
+               relative w-full cursor-pointer rounded-md bg-transparent border border-gray-200
+               px-1.5 md:px-4 py-1.5 md:py-3 text-sm text-left
+               outline-none transition
+               focus:border-primary focus:ring-1 focus:ring-primary
+               disabled:bg-foreground/10 disabled:cursor-not-allowed
+               ${className}
+             `}
+           >
             <span className="block truncate">
               {value ? value.label : placeholder}
             </span>

@@ -1,10 +1,16 @@
 @media (max-width: 1299px) {
-  .webHeaderLinksWrap{
+  .webHeaderLinksWrap {
     gap: 10px;
+  }
+  .headerSearchMdBtn {
+    display: block;
+  }
+  .headerSearchLGBtn {
+    display: none;
   }
 }
 @media (max-width: 1199px) {
-  .webHeaderLinksWrap a{
+  .webHeaderLinksWrap a {
     font-size: 12px;
   }
   .heroBannerImg {
@@ -13,17 +19,36 @@
   }
 }
 @media (max-width: 1024px) {
-  .featuredCollectionBestSellerVdo{
+  .featuredCollectionBestSellerVdo {
     grid-row: 1;
   }
 }
+@media (max-width: 1023px) {
+  .commonProductCard .wishlistButton,
+  .commonProductCard button {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  
+  .commonProductCard:hover .commonProductImgWrap img,
+  .commonProductCard:hover img {
+    transform: none !important;
+    scale: 1 !important;
+  }
+}
 @media (max-width: 768px) {
-  .commonSliderWrap .swiper-button-prev, .commonSliderWrap .swiper-button-next {
+  .commonSliderWrap .swiper-button-prev,
+  .commonSliderWrap .swiper-button-next {
     display: none;
   }
   .commonSliderWrap .swiper {
     margin: 0 0;
     padding: 0 0 40px;
+  }
+
+  .heroBannerImg {
+    height: auto;
+    max-height: 300px;
   }
 }
 @media (max-width: 767px) {
@@ -31,7 +56,6 @@
     opacity: 1;
   }
 }
-
 @media (max-width: 640px) {
   .otpInputWrap input {
     width: 3rem;
@@ -41,9 +65,7 @@
   .authPageWrap {
     padding: 1rem;
     align-items: center;
-
   }
-
   .signInCard {
     background: transparent;
     box-shadow: none;
@@ -52,41 +74,35 @@
     padding: 0;
   }
 }
-
 @media (max-width: 576px) {
   .productGrid {
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
   }
 
   .productCategoryItem {
-    height: 150px;
+    height: 240px;
   }
 
-  .commonProductCard .wishlistButton {
-    opacity: 1;
-    right: 6px;
-    top: 6px;
-  }
-  .productTag{
+  .productTag {
     left: 6px;
     top: 6px;
+    font-size: 8px;
+    padding: 2px 6px;
   }
-}
 
-@media (max-width: 480px) {
   .commonProductCard .commonProductImgWrap {
     height: 200px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .commonProductCard .commonProductTxtWrap h4 {
-    font-size: 15px;
-    margin-bottom: 8px;
+    font-size: 14px;
+    margin-bottom: 6px;
   }
 
   .commonProductCard .commonProductTxtWrap .mb-4 {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .commonProductCard {
@@ -96,52 +112,134 @@
 
   .commonProductCard>button {
     margin-top: auto;
+    font-size: 12px;
+    padding: 10px 12px;
   }
 
   .commonProductPrice {
-    font-size: 14px;
+    font-size: 13px;
+  }
+
+  .commonProductOldPrice {
+    font-size: 11px;
   }
 
   .commonProductGrid {
-    gap: 16px;
+    gap: 10px;
   }
-  .customerReviewCard{
+}
+@media (max-width: 480px) {
+  .commonProductCard .commonProductImgWrap {
+    height: 180px;
+    margin-bottom: 6px;
+    border-radius: 12px;
+  }
+
+  .commonProductCard .commonProductTxtWrap h4 {
+    font-size: 13px;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .commonProductCard .commonProductTxtWrap .mb-4 {
+    margin-bottom: 4px;
+  }
+
+  .commonProductPrice {
+    font-size: 13px;
+  }
+
+  .commonProductGrid {
+    gap: 8px;
+  }
+
+  .customerReviewCard {
     padding: 10px 16px;
     align-items: center;
   }
-}
 
+  .productDetailsQuantityWrap {
+    min-width: 0;
+  }
+
+  .accountTabsLink {
+    font-size: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
 @media (max-width: 414px) {
   .commonProductCard .commonProductImgWrap {
-    height: 180px;
+    height: 160px;
   }
   .productCategoryItem {
     padding: 10px;
   }
-  .commonProductOldPrice{
-    font-size: 12px;
+
+  .commonProductOldPrice {
+    font-size: 11px;
   }
   .commonProductCard .commonProductTxtWrap h4 {
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+    font-size: 12px;
   }
   .commonProductCard .commonProductTxtWrap .mb-4 {
     flex-direction: column;
     gap: 0;
   }
-  .accountUserCard{
+
+  .accountUserCard {
     flex-direction: column;
   }
-  .accountTabsLink{
+
+  .accountTabsLink {
+    font-size: 11px;
+  }
+  
+  .checkPinCodeBtn {
+    padding-left: 16px;
+    padding-right: 16px;
     font-size: 12px;
+  }
+  .productCategoryItem {
+    height: 200px;
+  }
+
+  .productGrid {
+    gap: 8px;
+  }
+
+  .commonProductCard>button {
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 20px;
   }
 }
 @media (max-width: 360px) {
-  .productCategoryItem button{
-    font-size: 12px;
-    padding: 10px 15px;
+  .productCategoryItem button {
+    font-size: 11px;
+    padding: 8px 12px;
   }
-  .commonProductCard > button {
+  .commonProductCard>button {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+  .productCategoryItem {
+    height: 160px;
+  }
+  .productDetailsQuantityWrap .px-4.py-2 {
+    padding: 8px 8px;
+  }
+  .productDetailsQuantityWrap .px-4:not(.py-2) {
+    padding: 0px 8px;
+  }
+  .commonProductCard .commonProductImgWrap {
+    height: 140px;
+  }
+  .commonProductCard .commonProductTxtWrap h4 {
+    font-size: 11px;
+  }
+  .commonProductPrice {
     font-size: 12px;
-    padding: 12px 15px;
   }
 }

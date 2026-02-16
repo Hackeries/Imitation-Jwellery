@@ -1,77 +1,59 @@
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import {
-  fetchProducts,
-  type ProductFilters,
-  type ProductListResponse,
-} from "@/services/product-service";
-import { getCategoryIdBySlug } from "@/services/category-service";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { JEWELRY_SET_SLUGS } from "@/constants";
+import { type ProductFilters, type ProductListResponse, type Product } from "@/types/index";
+import { fetchProducts } from "@/services/product-service";
 
 export const useProducts = (filters: ProductFilters = {}) => {
-  return useQuery<ProductListResponse, Error>({
-    queryKey: ["products", filters],
-    queryFn: () => fetchProducts(filters),
-    staleTime: 1000 * 60 * 5,
-    retry: 2,
-  });
-};
-
-export const useProductsInfinite = (
-  filters: Omit<ProductFilters, "page" | "limit" | "categoryId"> = {}
-) => {
-  return useInfiniteQuery<ProductListResponse, Error>({
-    queryKey: ["products", "infinite", filters],
-
-    queryFn: ({ pageParam }) => {
-      const page = pageParam as number;
-
-      return fetchProducts({
-        ...filters,
-        page,
-        limit: 20,
-      });
-    },
-
-    initialPageParam: 1,
-
-    getNextPageParam: (lastPage) =>
-      lastPage.meta.currentPage < lastPage.meta.totalPages
-        ? lastPage.meta.currentPage + 1
-        : undefined,
-
-    staleTime: 1000 * 60 * 5,
-    retry: 2,
-  });
-};
-
-const JEWELRY_SET_SLUGS = ["pendant", "earring", "bracelet", "necklace"];
-
-const useResolvedCategoryIds = (categorySlug: string) => {
-  return useQuery<string[]>({
-    queryKey: ["category-ids", categorySlug],
-
+  return useQuery<Product[]>({
+    queryKey: ["products", "list", filters],
     queryFn: async () => {
-      if (categorySlug === "jewelry-set") {
-        const ids = await Promise.all(
-          JEWELRY_SET_SLUGS.map((slug) => getCategoryIdBySlug(slug))
-        );
-        return ids.filter(Boolean) as string[];
-      }
-
-      const id = await getCategoryIdBySlug(categorySlug);
-      return id ? [id] : [];
+      const response = await fetchProducts(filters);
+      return response.data;
     },
-
-    enabled: Boolean(categorySlug),
-    staleTime: 1000 * 60 * 10,
-    retry: false,
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
+    throwOnError: false,
   });
 };
+
+export const useProductsInfinite = (filters: Omit<ProductFilters, "page" | "limit"> = {}) => {
+   return useInfiniteQuery<ProductListResponse, Error>({
+     queryKey: ["products", "infinite", filters.search, filters.categoryId, filters.categorySlug, filters.minPrice, filters.maxPrice, filters.isNewArrival, filters.isBestSeller, filters.inStock, filters.sort],
+
+     queryFn: ({ pageParam }) => {
+       const page = pageParam as number;
+
+       return fetchProducts({
+         search: filters.search,
+         categoryId: filters.categoryId,
+         categorySlug: filters.categorySlug,
+         minPrice: filters.minPrice,
+         maxPrice: filters.maxPrice,
+         isNewArrival: filters.isNewArrival,
+         isBestSeller: filters.isBestSeller,
+         inStock: filters.inStock,
+         sort: filters.sort,
+         page,
+         limit: 20,
+       });
+     },
+
+     initialPageParam: 1,
+
+     getNextPageParam: lastPage =>
+       lastPage.meta.currentPage < lastPage.meta.totalPages ? lastPage.meta.currentPage + 1 : undefined,
+
+     staleTime: 1000 * 60 * 5,
+     retry: 2,
+     throwOnError: false,
+   });
+ };
 
 export const useProductsByCategory = (
   categorySlug: string,
-  filters: Pick<ProductFilters, "minPrice" | "maxPrice"> = {}
+  filters: Pick<ProductFilters, "minPrice" | "maxPrice" | "inStock" | "sort"> = {},
 ) => {
-  const { data: categoryIds, isLoading } = useResolvedCategoryIds(categorySlug);
+  const slugsToQuery = categorySlug === "jewelry-set" ? JEWELRY_SET_SLUGS.join(",") : categorySlug;
 
   return useInfiniteQuery<ProductListResponse, Error>({
     queryKey: ["products", "category", categorySlug, filters],
@@ -80,9 +62,11 @@ export const useProductsByCategory = (
       const page = pageParam as number;
 
       return fetchProducts({
-        categoryId: categoryIds!,
+        categorySlug: slugsToQuery,
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
+        inStock: filters.inStock,
+        sort: filters.sort,
         page,
         limit: 20,
       });
@@ -90,14 +74,13 @@ export const useProductsByCategory = (
 
     initialPageParam: 1,
 
-    getNextPageParam: (lastPage) =>
-      lastPage.meta.currentPage < lastPage.meta.totalPages
-        ? lastPage.meta.currentPage + 1
-        : undefined,
+    getNextPageParam: lastPage =>
+      lastPage.meta.currentPage < lastPage.meta.totalPages ? lastPage.meta.currentPage + 1 : undefined,
 
-    enabled: Boolean(categoryIds?.length) && !isLoading,
+    enabled: Boolean(categorySlug),
 
     staleTime: 1000 * 60 * 5,
     retry: 2,
+    throwOnError: false,
   });
 };

@@ -1,155 +1,12 @@
-import { getDeviceId } from "@/lib/device-storage";
-import { formatPriceShort } from "@/lib/api-utils";
-
-export interface Order {
+export interface OrderSummary {
   id: string;
+  orderNumber: string;
   date: string;
   total: string;
-  status: "Processing" | "Shipped" | "Delivered" | "Cancelled";
-  items: number;
-}
-
-interface BackendOrder {
-  _id: string;
-  orderNumber: string;
-  createdAt: string;
-  totalAmount: number;
   status: string;
-  items: { productId: string; quantity: number }[] | number;
+  itemsCount: number;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
-
-const buildHeaders = (): HeadersInit => {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const deviceId = getDeviceId();
-  if (deviceId && deviceId !== "server") {
-    headers["X-Device-Id"] = deviceId;
-  }
-  return headers;
-};
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  const day = date.getDate();
-  const month = date.toLocaleString("en-US", { month: "short" });
-  const year = date.getFullYear();
-  return `${day} ${month} ${year}`;
-};
-
-const mapStatus = (
-  backendStatus: string
-): "Processing" | "Shipped" | "Delivered" | "Cancelled" => {
-  const statusMap: Record<
-    string,
-    "Processing" | "Shipped" | "Delivered" | "Cancelled"
-  > = {
-    pending: "Processing",
-    processing: "Processing",
-    confirmed: "Processing",
-    shipped: "Shipped",
-    delivered: "Delivered",
-    cancelled: "Cancelled",
-  };
-  return statusMap[backendStatus.toLowerCase()] || "Processing";
-};
-
-const transformOrder = (backendOrder: BackendOrder): Order => {
-  return {
-    id: backendOrder.orderNumber || backendOrder._id,
-    date: formatDate(backendOrder.createdAt),
-    total: formatPriceShort(backendOrder.totalAmount),
-    status: mapStatus(backendOrder.status),
-    items: Array.isArray(backendOrder.items)
-      ? backendOrder.items.length
-      : typeof backendOrder.items === "number"
-        ? backendOrder.items
-        : 0,
-  };
-};
-
-export const fetchOrders = async (): Promise<Order[]> => {
-  const url = `${API_BASE_URL}/api/v1/orders`;
-
-  try {
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: buildHeaders(),
-    });
-
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 401) {
-        return [];
-      }
-      throw new Error(`Failed to fetch orders: ${response.status}`);
-    }
-
-    const responseData = await response.json();
-
-    let backendOrders: BackendOrder[] = [];
-
-    if (responseData.data?.items && Array.isArray(responseData.data.items)) {
-      backendOrders = responseData.data.items;
-    } else if (responseData.data && Array.isArray(responseData.data)) {
-      backendOrders = responseData.data;
-    } else if (responseData.items && Array.isArray(responseData.items)) {
-      backendOrders = responseData.items;
-    } else if (Array.isArray(responseData)) {
-      backendOrders = responseData;
-    }
-
-    return backendOrders.map(transformOrder);
-  } catch {
-    return [];
-  }
-};
-
-export const fetchOrderById = async (orderId: string): Promise<Order | null> => {
-  const url = `${API_BASE_URL}/api/v1/orders/${orderId}`;
-
-  try {
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: buildHeaders(),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const responseData = await response.json();
-    const backendOrder: BackendOrder | undefined =
-      responseData?.data?.order ?? responseData?.data ?? responseData?.order;
-
-    if (!backendOrder) return null;
-
-    return transformOrder(backendOrder);
-  } catch {
-    return null;
-  }
-};
-
-export const cancelOrder = async (orderId: string): Promise<{ success: boolean; message: string }> => {
-  const url = `${API_BASE_URL}/api/v1/orders/${orderId}/cancel`;
-
-  const response = await fetch(url, {
-    method: "PUT",
-    credentials: "include",
-    headers: buildHeaders(),
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data?.message || "Failed to cancel order");
-  }
-
-  return { success: true, message: data?.message || "Order cancelled" };
-};
-
-// Full order details for order detail page
 export interface OrderItem {
   productId: string;
   productName: string;
@@ -159,16 +16,30 @@ export interface OrderItem {
   totalPrice: number;
 }
 
+export interface TrackingInfo {
+  awbNumber: string;
+  lastScanDetails: {
+    status: string;
+    scanLocation: string;
+    statusDateTime: string;
+    remark: string;
+  };
+  orderDateTime: {
+    expectedDeliveryDate: string;
+  };
+}
+
 export interface OrderDetails {
   id: string;
   orderNumber: string;
   date: string;
-  status: "Processing" | "Shipped" | "Delivered" | "Cancelled";
+  status: string;
   items: OrderItem[];
   subtotal: number;
   shipping: number;
   discount: number;
   total: number;
+  currency: string;
   shippingAddress: {
     fullName: string;
     line1: string;
@@ -177,93 +48,328 @@ export interface OrderDetails {
     state: string;
     pincode: string;
     country: string;
+    mobile: string;
   } | null;
-  paymentMethod: string;
-  expectedDelivery?: string;
+  tracking?: TrackingInfo;
+  // paymentMethod: string;
 }
 
-interface BackendOrderDetails {
+interface BackendOrderItem {
+  productId: string;
+  productName?: string;
+  thumbnail?: string;
+  qty: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+interface BackendAddressSnapshot {
+  fullName?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  mobile?: string;
+}
+
+interface BackendOrder {
   _id: string;
-  orderNumber: string;
+  orderNumber?: string;
   createdAt: string;
-  status: string;
-  items: {
-    productId: string | { _id: string; name: string; thumbnail?: string };
-    qty: number;
-    unitPrice: number;
-  }[];
+  totalAmount: number;
   subtotalAmount: number;
   shippingAmount: number;
   discountAmount: number;
-  totalAmount: number;
-  shippingAddress?: {
-    fullName: string;
-    line1: string;
-    line2?: string;
-    city: string;
-    state: string;
-    pincode: string;
-    country?: string;
+  status: string;
+  currency?: string;
+  itemIds: BackendOrderItem[] | string[];
+  shippingSnapshot?: BackendAddressSnapshot;
+  addressId?: BackendAddressSnapshot;
+  mobile?: string;
+  awbNumber?: string;
+  lastScanDetails?: {
+    status?: string;
+    scanLocation?: string;
+    statusDateTime?: string;
+    remark?: string;
   };
-  paymentMethod?: string;
-  expectedDeliveryDate?: string;
+  orderDateTime?: {
+    expectedDeliveryDate?: string;
+  };
 }
 
-const transformOrderDetails = (backend: BackendOrderDetails): OrderDetails => {
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipped"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled"
+  | "returned"
+  | "failed";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
+import { FALLBACK_IMAGE } from "@/constants";
+
+const getAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (typeof window !== "undefined") {
+    const token =
+      localStorage.getItem("token") || localStorage.getItem("authToken");
+    const deviceId =
+      localStorage.getItem("privora_device_id") ||
+      localStorage.getItem("deviceId");
+
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (deviceId) headers["X-Device-Id"] = deviceId;
+  }
+  return headers;
+};
+
+const formatDate = (dateString: string): string => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+const transformOrderSummary = (backendOrder: BackendOrder): OrderSummary => {
   return {
-    id: backend._id,
-    orderNumber: backend.orderNumber || backend._id,
-    date: formatDate(backend.createdAt),
-    status: mapStatus(backend.status),
-    items: backend.items.map((item) => {
-      const product = typeof item.productId === "object" ? item.productId : null;
-      return {
-        productId: product ? product._id : String(item.productId),
-        productName: product?.name || "Product",
-        thumbnail: product?.thumbnail || "/img/placeholder.webp",
-        quantity: item.qty,
-        unitPrice: item.unitPrice,
-        totalPrice: item.qty * item.unitPrice,
-      };
-    }),
-    subtotal: backend.subtotalAmount || 0,
-    shipping: backend.shippingAmount || 0,
-    discount: backend.discountAmount || 0,
-    total: backend.totalAmount || 0,
-    shippingAddress: backend.shippingAddress
-      ? {
-          ...backend.shippingAddress,
-          country: backend.shippingAddress.country || "India",
-        }
-      : null,
-    paymentMethod: backend.paymentMethod || "Online Payment",
-    expectedDelivery: backend.expectedDeliveryDate
-      ? formatDate(backend.expectedDeliveryDate)
-      : undefined,
+    id: backendOrder._id,
+    orderNumber: backendOrder.orderNumber || backendOrder._id,
+    date: formatDate(backendOrder.createdAt),
+    total: formatCurrency(backendOrder.totalAmount),
+    status:
+      backendOrder.status.charAt(0).toUpperCase() +
+      backendOrder.status.slice(1),
+    itemsCount: Array.isArray(backendOrder.itemIds)
+      ? backendOrder.itemIds.length
+      : 0,
   };
 };
 
-export const fetchOrderDetails = async (orderId: string): Promise<OrderDetails | null> => {
+const transformOrderDetails = (backendOrder: BackendOrder): OrderDetails => {
+  const snapshot = backendOrder.shippingSnapshot || {};
+  const fallbackAddress = backendOrder.addressId || {};
+
+  const resolvedMobile =
+    snapshot.mobile || fallbackAddress.mobile || backendOrder.mobile || "N/A";
+
+  const items = (
+    Array.isArray(backendOrder.itemIds) ? backendOrder.itemIds : []
+  ) as BackendOrderItem[];
+
+  const orderDetails: OrderDetails = {
+    id: backendOrder._id,
+    orderNumber: backendOrder.orderNumber || backendOrder._id,
+    date: formatDate(backendOrder.createdAt),
+    status:
+      backendOrder.status.charAt(0).toUpperCase() +
+      backendOrder.status.slice(1),
+    items: items.map((item) => ({
+      productId: item.productId,
+      productName: item.productName || "Product",
+      thumbnail: item.thumbnail || FALLBACK_IMAGE,
+      quantity: item.qty,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    })),
+    subtotal: backendOrder.subtotalAmount,
+    shipping: backendOrder.shippingAmount,
+    discount: backendOrder.discountAmount,
+    total: backendOrder.totalAmount,
+    currency: backendOrder.currency || "INR",
+    shippingAddress: {
+      fullName: snapshot.fullName || fallbackAddress.fullName || "",
+      line1: snapshot.line1 || fallbackAddress.line1 || "",
+      line2: snapshot.line2 || fallbackAddress.line2 || "",
+      city: snapshot.city || fallbackAddress.city || "",
+      state: snapshot.state || fallbackAddress.state || "",
+      pincode: snapshot.pincode || fallbackAddress.pincode || "",
+      country: snapshot.country || fallbackAddress.country || "India",
+      mobile: resolvedMobile,
+    },
+    // paymentMethod: "Online Payment",
+  };
+
+  if (backendOrder.awbNumber || backendOrder.lastScanDetails || backendOrder.orderDateTime) {
+    orderDetails.tracking = {
+      awbNumber: backendOrder.awbNumber || "",
+      lastScanDetails: {
+        status: backendOrder.lastScanDetails?.status || "N/A",
+        scanLocation: backendOrder.lastScanDetails?.scanLocation || "N/A",
+        statusDateTime: backendOrder.lastScanDetails?.statusDateTime || "N/A",
+        remark: backendOrder.lastScanDetails?.remark || "N/A",
+      },
+      orderDateTime: {
+        expectedDeliveryDate: backendOrder.orderDateTime?.expectedDeliveryDate || "",
+      },
+    };
+  }
+
+  return orderDetails;
+};
+
+export const fetchOrders = async (): Promise<OrderSummary[]> => {
+  const url = `${API_BASE_URL}/api/v1/orders`;
+
+  try {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) return [];
+
+    const json = await response.json();
+    const items = (json?.data?.items || json?.items || []) as BackendOrder[];
+    return items.map(transformOrderSummary);
+  } catch (err) {
+    return [];
+  }
+};
+
+export const fetchOrdersPaginated = async (
+  page: number = 1,
+  limit: number = 8,
+) => {
+  const url = `${API_BASE_URL}/api/v1/orders?page=${page}&limit=${limit}`;
+
+  try {
+    const response = await fetch(url, {
+      credentials: "include",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch orders");
+
+    const json = await response.json();
+    const items = (json?.data?.items || json?.items || []) as BackendOrder[];
+    const paginationData = json?.data?.pagination;
+    const pagination = {
+      page: paginationData?.page || page,
+      limit: paginationData?.limit || limit,
+      total: paginationData?.total || 0,
+    };
+
+    console.log(
+      "Fetched orders page",
+      page,
+      "items:",
+      items.length,
+      "pagination:",
+      pagination,
+    );
+
+    return {
+      orders: items.map(transformOrderSummary),
+      pagination,
+    };
+  } catch (err) {
+    console.error("Error fetching paginated orders:", err);
+    throw err;
+  }
+};
+
+export const fetchOrderDetails = async (
+  orderId: string,
+): Promise<OrderDetails | null> => {
   const url = `${API_BASE_URL}/api/v1/orders/${orderId}`;
 
   try {
     const response = await fetch(url, {
       credentials: "include",
-      headers: buildHeaders(),
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) return null;
+
+    const json = await response.json();
+    const orderData = (json?.data || json) as BackendOrder;
+    return transformOrderDetails(orderData);
+  } catch (err) {
+    return null;
+  }
+};
+
+export const trackOrder = async (
+  orderId: string,
+  phoneOrEmail: string,
+): Promise<OrderDetails | null> => {
+  const url = `${API_BASE_URL}/api/v1/orders/track`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        orderId,
+        contact: phoneOrEmail,
+      }),
     });
 
     if (!response.ok) {
-      return null;
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Tracking failed");
     }
 
-    const responseData = await response.json();
-    const backendOrder: BackendOrderDetails | undefined =
-      responseData?.data?.order ?? responseData?.data ?? responseData?.order;
+    const json = await response.json();
+    const orderData = (json?.data || json) as BackendOrder;
+    return transformOrderDetails(orderData);
+  } catch (err) {
+    throw err;
+  }
+};
 
-    if (!backendOrder) return null;
+export const cancelOrder = async (orderId: string): Promise<void> => {
+  const url = `${API_BASE_URL}/api/v1/orders/${orderId}/cancel`;
 
-    return transformOrderDetails(backendOrder);
-  } catch {
-    return null;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const json = await response.json();
+    throw new Error(json.message || "Failed to cancel order");
+  }
+};
+
+export const adminUpdateOrderStatus = async (
+  orderId: string,
+  status: OrderStatus,
+): Promise<void> => {
+  const url = `${API_BASE_URL}/api/v1/orders/admin/${orderId}/status`;
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    credentials: "include",
+    body: JSON.stringify({ status }),
+  });
+
+  if (!response.ok) {
+    const json = await response.json();
+    throw new Error(json.message || "Failed to update order status");
   }
 };

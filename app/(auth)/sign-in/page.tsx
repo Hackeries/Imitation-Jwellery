@@ -2,22 +2,54 @@
 
 import CommonButton from "@/app/components/button/CommonButton";
 import CommonInput from "@/app/components/input/CommonInput";
-import Link from "next/link";
-import React, { useState } from "react";
+
+import React, { useState, useEffect, Suspense } from "react";
 import OTPInput from "react-otp-input";
-import { Edit2 } from "lucide-react";
+import { Edit2, Loader2 } from "lucide-react";
 import LoginBackground from "./LoginBackground";
 import { useRequestOtp, useVerifyOtp } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { useRouter, useSearchParams } from "next/navigation";
+
+function SignInLoading() {
+  return (
+    <section className="min-h-screen flex items-center justify-center">
+      <Loader2 className="animate-spin text-brand" size={40} />
+    </section>
+  );
+}
+
+type requestWithOtp = { success: boolean; message: string; otp?: string }
 
 export default function SignIn() {
+  return (
+    <Suspense fallback={<SignInLoading />}>
+      <SignInContent />
+    </Suspense>
+  );
+}
+
+function SignInContent() {
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
   const [showOtp, setShowOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const requestOtpMutation = useRequestOtp();
   const verifyOtpMutation = useVerifyOtp();
+
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
 
   const handleRequestOtp = async () => {
     if (!mobile || mobile.length < 10) {
@@ -27,9 +59,17 @@ export default function SignIn() {
 
     setIsLoading(true);
     try {
-      await requestOtpMutation.mutateAsync(mobile);
+      const result: requestWithOtp = await requestOtpMutation.mutateAsync(mobile);
       setShowOtp(true);
-      toast.success("OTP sent to your mobile number");
+      setResendTimer(20);
+
+      if (result.otp) {
+        toast.success(`OTP sent! (Dev mode: ${result.otp})`, {
+          duration: 10000,
+        });
+      } else {
+        toast.success("OTP sent to your mobile number");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to send OTP"
@@ -48,11 +88,17 @@ export default function SignIn() {
     setIsLoading(true);
     try {
       await verifyOtpMutation.mutateAsync({ mobile, otp });
-      toast.success("Login successful!");
+
+      toast.success("Welcome back!", {
+        description: "You have successfully logged in.",
+      });
+
+      router.push(callbackUrl);
+      router.refresh();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "OTP verification failed"
-      );
+      toast.error("Login failed", {
+        description: error instanceof Error ? error.message : "Invalid OTP",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -61,13 +107,21 @@ export default function SignIn() {
   const handleEditNumber = () => {
     setShowOtp(false);
     setOtp("");
+    setResendTimer(0);
   };
 
   const handleResendOtp = async () => {
     setIsLoading(true);
     try {
-      await requestOtpMutation.mutateAsync(mobile);
-      toast.success("OTP resent successfully");
+      const result: requestWithOtp = await requestOtpMutation.mutateAsync(mobile);
+      setResendTimer(20);
+      if (result.otp) {
+        toast.success(`OTP resent! (Dev mode: ${result.otp})`, {
+          duration: 10000,
+        });
+      } else {
+        toast.success("OTP resent successfully");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to resend OTP"
@@ -83,98 +137,77 @@ export default function SignIn() {
       <div className="signInCard bg-background p-8 w-96 flex flex-col items-center justify-center gap-8">
         <h1 className="font-times text-3xl text-center">Privora</h1>
 
-        <div className="flex flex-col gap-1 w-full">
-          {showOtp ? (
-            <>
-              <h6 className="w-full text-lg text-foreground text-center font-medium">
-                Verify OTP
-              </h6>
-              <p className="text-sm text-foreground text-center">
-                Enter the OTP sent to your mobile number
-              </p>
-            </>
-          ) : (
-            <>
-              <h6 className="w-full text-lg text-foreground text-center font-medium">
-                Welcome Back
-              </h6>
-              <p className="text-sm text-foreground text-center">
-                Sign in to view your orders, wishlist, and exclusive offers.
-              </p>
-            </>
-          )}
+        <div className="flex flex-col gap-1 w-full text-center">
+          <h6 className="w-full text-lg text-foreground font-medium">
+            {showOtp ? "Verify OTP" : "Welcome Back"}
+          </h6>
+          <p className="text-sm text-foreground/70">
+            {showOtp
+              ? "Enter the OTP sent to your mobile number"
+              : "Sign in to view your orders, wishlist, and exclusive offers."}
+          </p>
         </div>
 
         <div className="w-full">
-          {!showOtp && (
+          {!showOtp ? (
             <CommonInput
               label="Mobile Number"
               name="mobile"
               type="tel"
               placeholder="Enter your mobile number"
               value={mobile}
-              onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              maxLength={10}
+              onChange={(e) =>
+                setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+              }
             />
-          )}
-
-          {showOtp && (
-            <div className="otpInputWrap">
-              <div className="flex items-center justify-center gap-2 mb-4 text-sm">
-                <p className="flex items-center gap-1">
-                  +91
-                  <span>{mobile}</span>
-                </p>
-                <CommonButton variant="iconBtn" onClick={handleEditNumber}>
-                  <Edit2 size={20} />
-                </CommonButton>
+          ) : (
+            <div className="otpInputWrap flex flex-col items-center">
+              <div className="flex items-center justify-center gap-2 mb-4 text-sm bg-foreground/5 py-2 px-4 rounded-full">
+                <span className="font-medium">+91 {mobile}</span>
+                <button
+                  type="button"
+                  onClick={handleEditNumber}
+                  className="text-brand hover:opacity-80"
+                  aria-label="Edit mobile number"
+                  title="Edit mobile number"
+                >
+                  <Edit2 size={16} />
+                </button>
               </div>
-
-              <h6 className="text-sm text-center mb-4">
-                Enter OTP sent to your mobile number
-              </h6>
 
               <OTPInput
                 value={otp}
                 onChange={setOtp}
                 numInputs={4}
-                renderSeparator={<span> </span>}
+                renderSeparator={<span className="mx-1"> </span>}
                 renderInput={(props) => (
                   <input
                     {...props}
-                    className="w-12 h-12 border border-gray-300 rounded text-center"
+                    className="w-12 h-12 border border-gray-300 rounded-lg text-center text-lg focus:border-brand outline-none transition-all"
                   />
                 )}
               />
 
-              <p className="text-sm mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={isLoading}
-                  className="commonLink disabled:opacity-50"
-                >
-                  Resend
-                </button>
-              </p>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={isLoading || resendTimer > 0}
+                className="mt-6 text-sm font-medium text-brand hover:underline disabled:opacity-50"
+              >
+                {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Resend OTP"}
+              </button>
             </div>
           )}
         </div>
 
         <CommonButton
           variant="primaryBtn"
+          className="w-full"
           onClick={showOtp ? handleVerifyOtp : handleRequestOtp}
           disabled={isLoading}
         >
           {isLoading ? "Please wait..." : showOtp ? "Verify OTP" : "Continue"}
         </CommonButton>
-
-        <p className="text-sm flex items-center gap-1 flex-wrap justify-center">
-          Don&apos;t have an account?
-          <Link href="#" className="commonLink">
-            Create Account
-          </Link>
-        </p>
       </div>
     </section>
   );
